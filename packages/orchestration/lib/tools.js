@@ -41,6 +41,7 @@ function withoutUndefined(value) {
 export function registerApprovalTools(ctx, dependencies) {
     const facade = dependencies.facade;
     const resolveCaller = dependencies.resolveCaller;
+    const bindDagCaptain = dependencies.bindDagCaptain;
     const propose = defineTool({
         name: 'sophia_team_propose',
         description: 'Propose a new team to the approval queue. Anyone may call this: a member proposal goes to their captain for review, a Human-hosted proposal goes straight to the owner card. The owner approving materializes the real team (DAG subagent teams for mode=dag, persistent Human/agent teams for mode=persistent).',
@@ -229,6 +230,10 @@ export function registerApprovalTools(ctx, dependencies) {
         async execute(args, exec) {
             const caller = await resolveCaller(exec);
             const facet = { isHuman: caller.isHuman, sessionId: caller.sessionId, handle: caller.handle, teamId: caller.teamId };
+            // Materialization happens *as* the deciding session: bind it first, so an
+            // approval materializes a team with a captain instead of failing.
+            if (args.decision === 'approve')
+                bindDagCaptain?.(caller);
             const result = await facade.approve(facet, args.request_id, {
                 decision: args.decision,
                 mode: args.mode,

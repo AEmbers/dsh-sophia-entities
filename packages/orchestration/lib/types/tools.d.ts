@@ -5,6 +5,15 @@ export interface ApprovalToolDependencies {
     facade: SophiaTeamFacade;
     /** Derive who is calling from the tool execution context. */
     resolveCaller(exec: ToolRunContext): Promise<CallerIdentity>;
+    /**
+     * Hands the deciding caller's session to the DAG backend before an approval
+     * runs, exactly as the HTTP plan route does. The facade carries no team state
+     * of its own, and the DAG backend cannot materialize without a captain plus a
+     * state root — so a tool-path approval (the model calling
+     * `sophia_team_approve`) needs this hook just as much as the card's POST does.
+     * Omitted by a host with no DAG backend wired.
+     */
+    bindDagCaptain?: (caller: CallerIdentity) => void;
 }
 export interface ApprovalToolSet {
     propose: unknown;

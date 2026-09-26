@@ -89,18 +89,29 @@ function buildApprovalPlane(ctx, { runtime, resolved }) {
             ctx.logger.error(message);
         }),
     });
-    registerApprovalTools(ctx, { facade, resolveCaller: resolveCallerFor(ctx, resolved) });
+    const bindDagCaptain = (agent) => {
+        dagHost.captain = agent;
+        // A team lives in its captain's workspace; fall back to the plane's.
+        dagHost.stateRoot = join(agent.session.header.cwd ?? workingDirectory, resolved.stateDir);
+    };
+    registerApprovalTools(ctx, {
+        facade,
+        resolveCaller: resolveCallerFor(ctx, resolved),
+        // The model-facing `sophia_team_approve` is a second door into the same
+        // materialization as the card's POST; it needs the captain bound too.
+        bindDagCaptain: (caller) => {
+            const agent = caller.sessionId === undefined ? undefined : ctx.agents.get(caller.sessionId);
+            if (agent !== undefined)
+                bindDagCaptain(agent);
+        },
+    });
     return {
         facade,
         dagBackend,
         persistentBackend,
         workingDirectory,
         maxTeamDepth: resolved.memberMaxDepth ?? 0,
-        bindDagCaptain: (agent) => {
-            dagHost.captain = agent;
-            // A team lives in its captain's workspace; fall back to the plane's.
-            dagHost.stateRoot = join(agent.session.header.cwd ?? workingDirectory, resolved.stateDir);
-        },
+        bindDagCaptain,
     };
 }
 /**

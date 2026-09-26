@@ -20,6 +20,15 @@ export interface ApprovalToolDependencies {
   facade: SophiaTeamFacade
   /** Derive who is calling from the tool execution context. */
   resolveCaller(exec: ToolRunContext): Promise<CallerIdentity>
+  /**
+   * Hands the deciding caller's session to the DAG backend before an approval
+   * runs, exactly as the HTTP plan route does. The facade carries no team state
+   * of its own, and the DAG backend cannot materialize without a captain plus a
+   * state root — so a tool-path approval (the model calling
+   * `sophia_team_approve`) needs this hook just as much as the card's POST does.
+   * Omitted by a host with no DAG backend wired.
+   */
+  bindDagCaptain?: (caller: CallerIdentity) => void
 }
 
 export interface ApprovalToolSet {
@@ -63,6 +72,7 @@ export function registerApprovalTools(
 ): ApprovalToolSet {
   const facade = dependencies.facade
   const resolveCaller = dependencies.resolveCaller
+  const bindDagCaptain = dependencies.bindDagCaptain
 
   const propose = defineTool({
     name: 'sophia_team_propose',
@@ -254,6 +264,9 @@ export function registerApprovalTools(
     async execute(args, exec) {
       const caller = await resolveCaller(exec)
       const facet = { isHuman: caller.isHuman, sessionId: caller.sessionId, handle: caller.handle, teamId: caller.teamId }
+      // Materialization happens *as* the deciding session: bind it first, so an
+      // approval materializes a team with a captain instead of failing.
+      if (args.decision === 'approve') bindDagCaptain?.(caller)
       const result = await facade.approve(facet, args.request_id, {
         decision: args.decision,
         mode: args.mode as TeamMode | undefined,
