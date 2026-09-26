@@ -76,7 +76,7 @@ function fakeBackend(): TeamBackend {
   }
 }
 
-function makeTools(options: { caller?: CallerIdentity; backend?: TeamBackend } = {}) {
+function makeTools(options: { caller?: CallerIdentity; backend?: TeamBackend; bindings?: CallerIdentity[] } = {}) {
   const facade = new SophiaTeamFacade({
     workspace,
     host: {
@@ -90,10 +90,15 @@ function makeTools(options: { caller?: CallerIdentity; backend?: TeamBackend } =
     notify: async () => undefined,
   })
   const registered: CapturedTool[] = []
+  const bindings = options.bindings ?? []
   let caller = options.caller ?? human
   registerApprovalTools(
     { tools: { register: (tool: unknown) => { registered.push(tool as CapturedTool) } } },
-    { facade, resolveCaller: async () => caller },
+    {
+      facade,
+      resolveCaller: async () => caller,
+      bindDagCaptain: (bound) => { bindings.push(bound) },
+    },
   )
   const run = async (name: string, args: unknown): Promise<Record<string, unknown>> => {
     const tool = registered.find((candidate) => candidate.name === name)
@@ -194,5 +199,37 @@ describe('P2.3 tool outputs are lossless JSON', () => {
     expect(undefinedKeys(output)).toEqual([])
     expect(output['materialized']).toBe(true)
     expect(output['mode']).toBe('dag')
+  })
+})
+
+describe('the tool path binds the deciding session for materialization', () => {
+  it('binds the caller before an approve materializes', async () => {
+    const bindings: CallerIdentity[] = []
+    const owner: CallerIdentity = { isHuman: true, sessionId: 'owner-1' }
+    const tools = makeTools({ backend: fakeBackend(), bindings, caller: owner })
+    const proposed = await tools.run('sophia_team_propose', { goal: 'g', plan })
+
+    await tools.run('sophia_team_approve', {
+      request_id: String(proposed['request_id']),
+      decision: 'approve',
+      mode: 'dag',
+    })
+
+    // The DAG backend cannot materialize without a captain: the tool has to
+    // hand the deciding session over, exactly as the card's POST route does.
+    expect(bindings).toEqual([owner])
+  })
+
+  it('binds nothing on a reject — no materialization is attempted', async () => {
+    const bindings: CallerIdentity[] = []
+    const tools = makeTools({ backend: fakeBackend(), bindings })
+    const proposed = await tools.run('sophia_team_propose', { goal: 'g', plan })
+
+    await tools.run('sophia_team_approve', {
+      request_id: String(proposed['request_id']),
+      decision: 'reject',
+    })
+
+    expect(bindings).toEqual([])
   })
 })
