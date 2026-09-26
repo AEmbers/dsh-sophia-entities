@@ -329,17 +329,17 @@
 }
 
 .danger {
-  border-color: var(--dsw-alias-state-danger, var(--dsw-alias-border-l3));
-  color: var(--dsw-alias-state-danger, var(--dsw-alias-label-secondary));
+  border-color: var(--dsw-alias-state-error-primary, var(--dsw-alias-border-l3));
+  color: var(--dsw-alias-state-error-primary, var(--dsw-alias-label-secondary));
 }
 
 .danger:hover:not(:disabled) {
-  border-color: var(--dsw-alias-state-danger, var(--dsw-alias-state-business-primary));
-  color: var(--dsw-alias-state-danger, var(--dsw-alias-state-business-primary));
+  border-color: var(--dsw-alias-state-error-primary, var(--dsw-alias-state-business-primary));
+  color: var(--dsw-alias-state-error-primary, var(--dsw-alias-state-business-primary));
 }
 
 .feedback {
-  color: var(--dsw-alias-state-danger, var(--dsw-alias-label-tertiary));
+  color: var(--dsw-alias-state-error-primary, var(--dsw-alias-label-tertiary));
   font-size: 11px;
   line-height: 16px;
 }
@@ -410,7 +410,7 @@
   padding: 0 5px;
   box-sizing: border-box;
   border-radius: 999px;
-  background: var(--dsw-alias-state-danger, #e5484d);
+  background: var(--dsw-alias-state-error-primary, #e5484d);
   color: var(--dsw-alias-label-primary-inverted, #fff);
   font-size: 10px;
   font-weight: 700;
