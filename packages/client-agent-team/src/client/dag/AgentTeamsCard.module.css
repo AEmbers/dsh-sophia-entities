@@ -54,6 +54,7 @@
   padding: 2px 8px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -89,6 +90,7 @@
   padding: 3px 8px 3px 3px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -126,6 +128,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-label-primary-inverted);
   font-size: 10px;
