@@ -13,7 +13,7 @@
 // Design judgment stays in docs; the script only reports mechanical drift.
 
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { harnessDir } from './harness-dir.mjs'
 
@@ -91,8 +91,8 @@ function stripNestedAtRules(css, file) {
   return kept.join('\n')
 }
 
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.css'))) {
-  const css = readFileSync(join(clientDir, file), 'utf8')
+for (const file of walkFiles(clientDir, [], /\.module\.css$/)) {
+  const css = readFileSync(file, 'utf8')
   const rules = collectRules(css)
   const interactive = new Set()
   for (const rule of rules) {
@@ -132,8 +132,8 @@ const RING_GRADE = [
   /text-decoration\s*:\s*(?!\s*none\b)/,
 ]
 
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.css'))) {
-  const css = readFileSync(join(clientDir, file), 'utf8')
+for (const file of walkFiles(clientDir, [], /\.module\.css$/)) {
+  const css = readFileSync(file, 'utf8')
   for (const rule of collectRules(css)) {
     if (!/:focus-visible/.test(rule.selector)) continue
     if (!/outline\s*:\s*(?:none|0)\b/.test(rule.body)) continue
@@ -156,9 +156,9 @@ const colorExceptions = new Set([
   'avatar-stack.module.css', // entry-stack avatar text #fff on the hue fill
 ])
 
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.css'))) {
+for (const file of walkFiles(clientDir, [], /\.module\.css$/)) {
   if (colorExceptions.has(file)) continue
-  const css = readFileSync(join(clientDir, file), 'utf8')
+  const css = readFileSync(file, 'utf8')
   for (const match of css.matchAll(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g)) {
     note('warn', `${file}`, `hardcoded color '${match[0]}' (only --dsw-alias-* tokens or documented exceptions)`)
   }
@@ -272,8 +272,8 @@ if (shippedPrimitives.size === 0) {
   note('error', 'shipped primitives', `cannot read exported names from ${primitivesBarrel} — re-verify the parity baseline`)
 } else {
   const seen = new Set()
-  for (const file of readdirSync(clientDir).filter(name => name.endsWith('.tsx'))) {
-    const src = readFileSync(join(clientDir, file), 'utf8')
+  for (const file of walkFiles(clientDir, [], /\.tsx$/)) {
+    const src = readFileSync(file, 'utf8')
     for (const match of src.matchAll(/import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+'@deepseek-ai\/dsh-client-ui-primitives'/g)) {
       for (const entry of match[1].split(',')) {
         const name = entry.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]?.trim()
@@ -361,8 +361,8 @@ for (const [file, selector, expected, what] of GEOMETRY) {
 // The same rule, applied to every sheet rather than the canonical controls:
 // a fractional border width promises a thinner line than the platform can
 // paint. Fractional shadow offsets and radii are legitimate and not scanned.
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.css'))) {
-  const css = stripNestedAtRules(readFileSync(join(clientDir, file), 'utf8'), file)
+for (const file of walkFiles(clientDir, [], /\.module\.css$/)) {
+  const css = stripNestedAtRules(readFileSync(file, 'utf8'), file)
   for (const rule of collectRules(css)) {
     const selector = rule.selector.replace(/^[\s\S]*\*\//, '').replace(/\s+/g, ' ').trim()
     for (const declaration of rule.body.matchAll(/(?:^|;)\s*border(?:-(?:top|right|bottom|left))?(?:-width)?\s*:\s*([^;]+)/g)) {
@@ -380,11 +380,19 @@ for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.
 //    silently, so the audit fails loudly instead — typos included.
 // ---------------------------------------------------------------------------
 
-function walkFiles(dir, out = []) {
+/**
+ * Every `.css` / `.ts` / `.tsx` file under `dir`, recursively, as absolute
+ * paths. Pass `match` to narrow the extension set.
+ *
+ * Recursion is the point: the Team Client keeps part of its surface in nested
+ * directories (`src/client/dag/`), and a top-level-only scan reports a clean
+ * audit while never reading the files that matter.
+ */
+function walkFiles(dir, out = [], match = /\.(css|ts|tsx)$/) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name)
-    if (entry.isDirectory()) walkFiles(path, out)
-    else if (/\.(css|ts|tsx)$/.test(entry.name)) out.push(path)
+    if (entry.isDirectory()) walkFiles(path, out, match)
+    else if (match.test(entry.name)) out.push(path)
   }
   return out
 }
@@ -406,8 +414,12 @@ if (shippedTokens.size === 0) {
   note('error', 'shipped theme', 'cannot read --dsw-* token definitions from the harness checkout — re-verify the parity baseline')
 } else {
   const teamRefs = new Map()
-  for (const file of readdirSync(clientDir).filter(name => /\.(css|tsx|ts)$/.test(name))) {
-    const text = readFileSync(join(clientDir, file), 'utf8')
+  // Recursive on purpose: the Team Client is more than the top-level directory
+  // (src/client/dag/ holds the activity panel). A non-recursive scan reports a
+  // clean token table while never looking at the files that matter.
+  for (const path of walkFiles(clientDir)) {
+    const file = relative(clientDir, path)
+    const text = readFileSync(path, 'utf8')
     for (const match of text.matchAll(/var\(--dsw-[\w-]+/g)) {
       const token = match[0].slice(4)
       if (!teamRefs.has(token)) teamRefs.set(token, new Set())
@@ -476,8 +488,8 @@ if (narrowBranch === null) {
 // ---------------------------------------------------------------------------
 
 const FULL_ROUND = /border-radius:\s*(?:50%|100%|999px)\s*;/
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.css'))) {
-  const css = readFileSync(join(clientDir, file), 'utf8')
+for (const file of walkFiles(clientDir, [], /\.module\.css$/)) {
+  const css = readFileSync(file, 'utf8')
   for (const rule of collectRules(css)) {
     if (!FULL_ROUND.test(rule.body)) continue
     if (!/corner-shape:\s*round/.test(rule.body)) {
@@ -526,8 +538,8 @@ function isTranslucentToken(token) {
   return seen
 }
 
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.css'))) {
-  const css = readFileSync(join(clientDir, file), 'utf8')
+for (const file of walkFiles(clientDir, [], /\.module\.css$/)) {
+  const css = readFileSync(file, 'utf8')
   for (const rule of collectRules(stripNestedAtRules(css, file))) {
     const bare = rule.selector.replace(/^[\s\S]*\*\//, '').trim()
     const surface = rule.body.match(/background(?:-color)?\s*:\s*var\((--dsw-[\w-]+)/)
@@ -548,8 +560,8 @@ for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.
 //     haspopup attribute at all, so it is not in this rule's path.
 // ---------------------------------------------------------------------------
 
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.tsx'))) {
-  const source = readFileSync(join(clientDir, file), 'utf8')
+for (const file of walkFiles(clientDir, [], /\.tsx$/)) {
+  const source = readFileSync(file, 'utf8')
   for (const match of source.matchAll(/aria-haspopup="listbox"/g)) {
     const line = source.slice(0, match.index).split('\n').length
     note('error', `${file}:${line}`, 'aria-haspopup="listbox" on a trigger whose popup is the shared Menu (role="menu", menuitem rows); declare aria-haspopup="menu"')
@@ -566,8 +578,8 @@ for (const file of readdirSync(clientDir).filter(name => name.endsWith('.tsx')))
 //     same shape.
 // ---------------------------------------------------------------------------
 
-for (const file of readdirSync(clientDir).filter(name => name.endsWith('.module.css'))) {
-  const css = readFileSync(join(clientDir, file), 'utf8')
+for (const file of walkFiles(clientDir, [], /\.module\.css$/)) {
+  const css = readFileSync(file, 'utf8')
   const containers = new Set()
   for (const rule of collectRules(css)) {
     if (!/container-type\s*:/.test(rule.body)) continue
