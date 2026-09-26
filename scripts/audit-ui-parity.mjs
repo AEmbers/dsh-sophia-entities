@@ -73,16 +73,34 @@ function collectRules(css) {
 // later sections run the same strip over the same sheet).
 const unclosedAtRules = new Set()
 
+/** Net brace change of one line (`{` minus `}`). */
+function braceDelta(line) {
+  let delta = 0
+  for (const ch of line) {
+    if (ch === '{') delta += 1
+    else if (ch === '}') delta -= 1
+  }
+  return delta
+}
+
 function stripNestedAtRules(css, file) {
   const kept = []
   let depth = 0
   for (const line of css.split('\n')) {
     if (depth === 0) {
-      if (/^@(container|media|supports)\b/.test(line)) { depth = 1; continue }
+      if (/^@(container|media|supports)\b/.test(line)) {
+        // An at-rule may open and close on one line (`@media (…) { .x { … } }`).
+        // Count braces instead of assuming the close sits at column 0, or a
+        // single-line branch swallows the rest of the sheet in silence.
+        depth = braceDelta(line)
+        if (depth === 0) kept.push(line)
+        continue
+      }
       kept.push(line)
       continue
     }
-    if (line.startsWith('}')) depth = 0
+    depth += braceDelta(line)
+    if (depth <= 0) depth = 0
   }
   if (depth !== 0 && !unclosedAtRules.has(file)) {
     unclosedAtRules.add(file)
