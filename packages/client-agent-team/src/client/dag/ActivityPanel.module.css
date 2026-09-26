@@ -30,6 +30,7 @@
   box-sizing: border-box;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--dsw-alias-bg-module-platform) 92%, transparent);
   backdrop-filter: blur(16px);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--dsw-alias-bg-mask-3) 29%, transparent);
@@ -66,6 +67,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-label-tertiary);
 }
 
@@ -210,6 +212,7 @@
   width: 3px;
   height: 48px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 42%, transparent);
   content: '';
   opacity: 0.45;
@@ -232,6 +235,7 @@
   width: 48px;
   height: 3px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 42%, transparent);
   content: '';
   opacity: 0.45;
@@ -288,6 +292,7 @@
 .teams::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 28%, transparent);
   background-clip: padding-box;
 }
@@ -600,6 +605,7 @@
   box-sizing: border-box;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-button-ghost-active-fill);
   color: var(--dsw-alias-label-tertiary);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -749,6 +755,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
 }
 
@@ -849,6 +856,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
   content: '';
 }
@@ -896,6 +904,7 @@
   box-sizing: border-box;
   border: 1px solid var(--dsw-alias-bg-layer-1);
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
   content: '';
   animation: agentTeamsUnreadPulse 1.8s ease-in-out infinite;
@@ -913,6 +922,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-label-primary-inverted);
   font-size: 14px;
@@ -1363,6 +1373,7 @@
   flex: none;
   padding: 1px 7px;
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
   color: var(--dsw-alias-label-primary-inverted);
   font-size: 9px;
@@ -1414,6 +1425,7 @@
   place-items: center;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 50%;
+  corner-shape: round;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
 }
@@ -1562,6 +1574,7 @@
   justify-self: end;
   padding: 1px 5px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 13%, transparent);
   color: var(--dsw-alias-state-warn-primary);
   font-size: 8px;
@@ -1908,6 +1921,7 @@
   place-items: center;
   border: 1px solid currentColor;
   border-radius: 50%;
+  corner-shape: round;
 }
 
 .planFeedback svg {
