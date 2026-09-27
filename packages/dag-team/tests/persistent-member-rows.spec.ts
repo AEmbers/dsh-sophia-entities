@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { persistentTeamSnapshot } from '../src/snapshot.ts'
+import { ORG_POSTS } from '../src/org-tree.ts'
 import type { TeamSummary } from 'dsh-sophia-entities/orchestration'
 
 const SUMMARY: TeamSummary = {
@@ -58,5 +59,67 @@ describe('persistentTeamSnapshot member rows', () => {
     ])
 
     expect(snapshot.members.map(member => member.status)).toEqual(['idle', 'idle', 'removed', 'removed'])
+  })
+})
+
+describe('persistentTeamSnapshot organisation grouping', () => {
+  /** Every post the tree expects, as member rows. */
+  function fullRoster() {
+    return ORG_POSTS.map(post => ({
+      id: `id:${post}`, name: post, role: '', state: 'enabled',
+    }))
+  }
+
+  it('groups a fully-staffed roster into the designed bureaux', () => {
+    const snapshot = persistentTeamSnapshot('Sophia', SUMMARY, fullRoster())
+
+    expect(snapshot.org).toBeDefined()
+    expect(snapshot.org?.map(bureau => bureau.label)).toEqual([
+      '监正', '总控司', '观象司', '历算司', '星验司',
+    ])
+    // Every bureau carries its members, and the chiefs keep their identity.
+    const algorithm = snapshot.org?.find(bureau => bureau.id === 'algorithm')
+    expect(algorithm?.chief).toBe('灵台郎')
+    expect(algorithm?.members).toContain('灵台郎')
+    expect(algorithm?.mandate).not.toBe('')
+  })
+
+  it('accounts for every member through the grouping', () => {
+    const snapshot = persistentTeamSnapshot('Sophia', SUMMARY, fullRoster())
+
+    const grouped = (snapshot.org ?? []).flatMap(bureau => [...bureau.members])
+    expect([...grouped].sort()).toEqual([...ORG_POSTS].sort())
+    expect(snapshot.members).toHaveLength(ORG_POSTS.length)
+  })
+
+  it('draws no grouping for a partial roster', () => {
+    // Two members is a real team (the owner approved one), but not the tree —
+    // drawing bureaux here would imply colleagues who are not in the team.
+    const snapshot = persistentTeamSnapshot('Sophia', SUMMARY, [
+      { id: 'a', name: '星文审校', role: '技术审核 & 代码评审', state: 'enabled' },
+      { id: 'b', name: '星机校验', role: '技术测试工程师', state: 'enabled' },
+    ])
+
+    expect(snapshot.org).toBeUndefined()
+    expect(snapshot.members).toHaveLength(2)
+  })
+
+  it('draws no grouping for a roster with an unknown post', () => {
+    // Nineteen posts plus one stranger: the tree is not satisfied, so no
+    // grouping — the stranger is still drawn as a row.
+    const rows = [...fullRoster().slice(0, 19), { id: 'x', name: 'ledger-check', role: 'verifier', state: 'enabled' }]
+
+    const snapshot = persistentTeamSnapshot('Sophia', SUMMARY, rows)
+
+    expect(snapshot.org).toBeUndefined()
+    expect(snapshot.members).toHaveLength(20)
+    expect(snapshot.members.some(member => member.name === 'ledger-check')).toBe(true)
+  })
+
+  it('draws no grouping when rows were never supplied', () => {
+    const snapshot = persistentTeamSnapshot('Sophia', SUMMARY)
+
+    expect(snapshot.org).toBeUndefined()
+    expect(snapshot.members).toEqual([])
   })
 })

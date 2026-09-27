@@ -190,6 +190,7 @@ export declare const zh: {
     'team.persistent.heading': string;
     'team.persistent.members': string;
     'team.persistent.tasks': string;
+    'team.persistent.chief': string;
     'delegation.aria': string;
     'captain.name': string;
     'captain.role': string;
@@ -444,6 +445,7 @@ export declare const en: {
     'team.persistent.heading': string;
     'team.persistent.members': string;
     'team.persistent.tasks': string;
+    'team.persistent.chief': string;
     'delegation.aria': string;
     'captain.name': string;
     'captain.role': string;
