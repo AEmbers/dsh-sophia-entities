@@ -12,6 +12,7 @@
  * members past `maxTeamDepth` levels may not propose new teams.
  */
 import { ApprovalRouter, type NotifyEvent } from './router.ts'
+import { ApprovalTransitionError } from './errors.ts'
 import { approvalsRootOf } from './store.ts'
 import type {
   ActivitySnapshot,
@@ -114,7 +115,11 @@ export class SophiaTeamFacade {
         && request.requester.kind === 'member'
         && request.requester.memberId === caller.sessionId
       if (!ownDraft) {
-        throw new Error('only the Human owner may set the mode of a pending request')
+        throw new ApprovalTransitionError(
+          'human_only',
+          'only the Human owner may set the mode of a pending request',
+          request?.state,
+        )
       }
     }
     return this.router.setMode(requestId, mode)
@@ -127,14 +132,18 @@ export class SophiaTeamFacade {
     verdict: Omit<CaptainVerdict, 'decidedBy' | 'decidedAt'>,
   ): Promise<ReturnType<ApprovalRouter['review']>> {
     if (caller.isHuman) {
-      throw new Error('the Human owner cannot review member proposals — use approve')
+      throw new ApprovalTransitionError('captain_only', 'the Human owner cannot review member proposals — use approve')
     }
     const request = await this.requireRequest(requestId)
     const captain = request.requester.teamId
       ? await this.host.captainOf?.(request.requester.teamId)
       : undefined
     if (!captain || captain !== caller.sessionId) {
-      throw new Error('only the team captain may review this proposal')
+      throw new ApprovalTransitionError(
+        'captain_only',
+        'only the team captain may review this proposal',
+        request.state,
+      )
     }
     return this.router.review(requestId, {
       ...verdict,
@@ -150,7 +159,11 @@ export class SophiaTeamFacade {
     verdict: Omit<OwnerVerdict, 'decidedAt'>,
   ): Promise<ReturnType<ApprovalRouter['approve']>> {
     if (!caller.isHuman) {
-      throw new Error('only the Human owner may approve a request')
+      throw new ApprovalTransitionError(
+        'human_only',
+        'only the Human owner may approve a request',
+        (await this.router.get(requestId))?.state,
+      )
     }
     return this.router.approve(requestId, {
       ...verdict,

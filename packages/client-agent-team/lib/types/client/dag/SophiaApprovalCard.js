@@ -151,7 +151,7 @@ function OwnerApprovalCard({ data, sessionId, t }) {
                 setMode(result.mode);
         }
         catch (err) {
-            setError(approvalErrorMessage(err));
+            setError(approvalErrorMessage(err, t));
         }
         finally {
             setBusy(false);
@@ -180,7 +180,7 @@ function CaptainReviewCard({ data, sessionId, t }) {
                 setOutcome(result.state);
         }
         catch (err) {
-            setError(approvalErrorMessage(err));
+            setError(approvalErrorMessage(err, t));
         }
         finally {
             setBusy(false);

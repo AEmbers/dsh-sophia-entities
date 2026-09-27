@@ -1,5 +1,23 @@
-/** Read the approval queue. */
+// The structured errors ride with the HTTP surface that renders them: the route
+// layer maps a coded refusal to 409 + `{ error, code, state? }`, and the dag-team
+// plugin imports the mapper from this module.
+export { APPROVAL_ERROR_MESSAGES, ApprovalTransitionError, EmptyPlanError, approvalErrorCodeOf, toApprovalHttpError, } from "./errors.js";
+/**
+ * Read the approval queue.
+ *
+ * Read-time reconciliation (deliberate write on a read path): the queue is what
+ * the panel and the badge poll, and it must never serve a row whose timeout has
+ * already passed — such a row is stuck by construction, because the state it
+ * sits in (`pending_captain` with no captain able to decide, or an owner request
+ * nobody was told about) has no way out on its own. Sweeping first applies the
+ * published timeout table (§4.5: pending_captain → pending_owner, the rest →
+ * expired) so the very poll that reads the queue also reconciles it. The same
+ * sweep also runs on a background timer in the plugin (sophia-approval.ts), so
+ * the queue still moves when nobody has a panel open; this call is what makes
+ * the guarantee observable within a single poll.
+ */
 export async function snapshotApprovals(facade) {
+    await facade.sweepExpired();
     const requests = await facade.pendingApprovals();
     return {
         requests: requests.map((request) => ({

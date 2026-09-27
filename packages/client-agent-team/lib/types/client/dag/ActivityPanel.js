@@ -26,7 +26,7 @@ import { ACTIVITY_HALT_URL, getActivityMonitorTargetsSnapshot, getActivitySnapsh
 import { ACTION_ART, LEAD_ART, memberArtUrl } from "./artwork.js";
 import { OPEN_PANEL_EVENT } from "./AgentTeamsCard.js";
 import { startApprovalBadgePolling } from "./sophia-approval-badge.js";
-import { postApprovalPlanAction } from "./sophia-approval-requests.js";
+import { approvalErrorMessage, postApprovalPlanAction } from "./sophia-approval-requests.js";
 import { StagingPlanEditor } from "./StagingPlanEditor.js";
 import { DEFAULT_PANEL_LAYOUT, PANEL_LAYOUT_STORAGE_KEY, compactPanelForBounds, dockPanelLayout, floatPanelLayout, movePanelLayout, panelMaximumHeight, panelUsesAutoHeight, parsePanelLayout, resizePanelLayout, resolvePanelGeometry, } from "./panel-geometry.js";
 import css from './ActivityPanel.module.css';
@@ -121,6 +121,11 @@ function taskTone(state, status) {
  * it and the badge's click had nowhere to go. The panel is always mounted, so
  * it reads the same host queue the badge polls and offers the owner controls
  * here — one durable place to approve, independent of chat scrollback.
+ *
+ * Only a `pending_owner` row is the owner's to decide. A `pending_captain` row
+ * is waiting on the captain, so it renders a non-interactive label: showing
+ * [批准][退回] there answered every click with the host's refusal, because the
+ * owner route is not the route that settles it.
  */
 export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }) {
     const [rows, setRows] = useState([]);
@@ -141,14 +146,23 @@ export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }) 
         const payload = decision === 'approve'
             ? { action: 'approve', requestId, decision: 'approve' }
             : { action: 'reject', requestId };
+        // A refused action keeps its row: the proposal is still pending, so the
+        // owner must be able to look at it and decide again (notably [退回] after a
+        // refused [批准]). Only a settled action removes a row, and the host is the
+        // one that says so.
         void postApprovalPlanAction(sessionId, payload)
             .then(() => { setRows((current) => current.filter((row) => row.id !== requestId)); })
-            .catch((cause) => { setError(cause instanceof Error ? cause.message : String(cause)); })
+            .catch((cause) => { setError({ requestId, message: approvalErrorMessage(cause, t) }); })
             .finally(() => { setBusyId(undefined); });
     };
     if (rows.length === 0)
         return null;
-    return (_jsx("section", { className: placement === 'surface' ? `${css.approvals} ${css.approvalsSurface}` : css.approvals, "aria-label": t('approval.badge.title'), "data-pending-approvals": rows.length, children: rows.map((row) => (_jsxs("article", { className: css.approvalRow, "data-request-id": row.id, "data-mode": row.mode ?? 'unset', children: [_jsx("span", { className: css.approvalGoal, children: row.goal }), _jsx("span", { className: css.approvalMeta, children: t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`) }), error !== undefined && busyId === undefined && (_jsx("span", { className: css.approvalError, role: "alert", children: error })), _jsxs("span", { className: css.approvalActions, children: [_jsx("button", { type: "button", className: css.approvalApprove, disabled: busyId !== undefined, onClick: () => { act(row.id, 'approve'); }, children: t('approval.approve') }), _jsx("button", { type: "button", className: css.approvalReject, disabled: busyId !== undefined, onClick: () => { act(row.id, 'reject'); }, children: t('approval.reject') })] })] }, row.id))) }));
+    return (_jsx("section", { className: placement === 'surface' ? `${css.approvals} ${css.approvalsSurface}` : css.approvals, "aria-label": t('approval.badge.title'), "data-pending-approvals": rows.length, children: rows.map((row) => {
+            const owner = row.state === 'pending_owner';
+            return (_jsxs("article", { className: css.approvalRow, "data-request-id": row.id, "data-mode": row.mode ?? 'unset', "data-state": row.state, children: [_jsx("span", { className: css.approvalGoal, children: row.goal }), _jsx("span", { className: css.approvalMeta, children: t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`) }), owner && error !== undefined && error.requestId === row.id && busyId === undefined && (_jsx("span", { className: css.approvalError, role: "alert", children: error.message })), owner
+                        ? (_jsxs("span", { className: css.approvalActions, children: [_jsx("button", { type: "button", className: css.approvalApprove, disabled: busyId !== undefined, onClick: () => { act(row.id, 'approve'); }, children: t('approval.approve') }), _jsx("button", { type: "button", className: css.approvalReject, disabled: busyId !== undefined, onClick: () => { act(row.id, 'reject'); }, children: t('approval.reject') })] }))
+                        : _jsx("span", { className: css.approvalWaiting, children: t('approval.row.waitingCaptain') })] }, row.id));
+        }) }));
 }
 function Chevron({ open }) {
     return (_jsx("svg", { className: css.chevron, "data-open": open, width: "9", height: "9", viewBox: "0 0 10 10", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", "aria-hidden": true, children: _jsx("path", { d: "M3.5 2l3 3-3 3" }) }));

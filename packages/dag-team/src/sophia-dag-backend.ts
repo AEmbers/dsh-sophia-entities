@@ -22,11 +22,19 @@
  * the state root follows the captain's workspace and the captain is only known
  * once a session actually decides. Fields present on the passed `ctx` win over
  * the provider's. `create` throws loudly when `captain`/`stateRoot` are absent
- * (host wiring bug, not a silent no-op); `describe`/`list` degrade to
+ * (host wiring bug, not a silent no-op); it also refuses a plan that could not
+ * run — no members, or no tasks — with a coded `empty_plan` error, before
+ * anything reaches the state root. `describe`/`list` degrade to
  * `undefined`/`[]` without a state root.
  */
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { readdirSync } from 'node:fs'
+// The structured errors ride with the routes module — the exported subpath that
+// carries the frozen HTTP error contract. The bare
+// `dsh-sophia-entities/orchestration` specifier resolves to `types.ts` at source
+// level (types only, no runtime values), so a value import must use a subpath
+// that resolves to a real module in both the source and the package layout.
+import { EmptyPlanError } from 'dsh-sophia-entities/orchestration/routes'
 import type {
   ApprovalRequest,
   MaterializeResult,
@@ -91,6 +99,17 @@ export function createSophiaDagBackend(deps: {
       const stateRoot = hostStateRoot(host)
       if (stateRoot === undefined) {
         throw new Error('dag backend create: ctx.stateRoot is required — the host must pass the team state root')
+      }
+      // A plan with no members, or no tasks, materializes a team that can never
+      // do anything — and the approval path had no runnable check at all (only
+      // the staged path does, via validateStagedGraph). Refuse BEFORE touching
+      // the state root, so a refused approval creates no team and leaves the
+      // request exactly where it was (the router keeps the pre-materialization
+      // state, so the owner can still reject the request afterwards).
+      if (request.plan.members.length === 0 || request.plan.tasks.length === 0) {
+        throw new EmptyPlanError(
+          `计划不可运行：至少需要一名成员和一个任务（请求 ${request.id}，成员 ${request.plan.members.length}，任务 ${request.plan.tasks.length}）`,
+        )
       }
       const goal = typeof request.goal === 'string' ? request.goal.trim() : ''
       const teamName = truncateText(goal === '' ? 'Materialized approval plan' : goal, TEAM_NAME_MAX)

@@ -11,6 +11,10 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { join } from 'node:path';
+// See sophia-dag-backend.ts: the coded approval errors are exported through the
+// routes subpath, because the bare orchestration specifier is types-only at
+// source level.
+import { EmptyPlanError } from 'dsh-sophia-entities/orchestration/routes';
 import { appendTeamEvent, captainSessionOf } from "./events.js";
 import { amendTaskContract, acknowledgeMailbox, markMailboxDelivered, discardMailboxMessages, appendMailbox, archiveTeamDir, beginTaskAttempt, CAPTAIN_KEY, createMessage, createTeamDir, findTeamByCaptain, findTeamByParticipant, cancelUnfinishedTask, invalidateTaskAttempt, readUnreadMailbox, readMailbox, recordRetiredMemberIds, releaseMailboxDelivery, readTeam, readTeamSync, sanitizeKey, transitionError, unsatisfiedDependencies, withTeamLock, writeTeam, validateCreateTask, evaluateQualityCompletion, planQualityFollowUp, resumeTeamState, buildCoverageMatrix, canDeclareDelivery, describeQualityLoop, sanitizeReviewAcceptance, sanitizeReviewObjective, normalizeBlankOptionalTaskFields, taskKindOf, } from "./state.js";
 import { appendTaskEvidence } from "./quality-gates.js";
@@ -576,6 +580,14 @@ export function registerAgentTeamsTools(ctx, config) {
     const materializePlan = async (captain, input, signal) => {
         const workspace = workspaceOf(captain);
         const resolved = await withTeamLock(teamLockKey(input.stateRoot, input.teamId), async () => {
+            // Defence in depth for the runnable rule `validateStagedGraph` enforces on
+            // the staged path (at least one member and one task). The approval backend
+            // refuses an empty plan before calling here; this guard is what makes the
+            // invariant hold for the commit itself — it fires before createTeamDir, so
+            // a refused materialization can never leave a team directory behind.
+            if (input.plan.members.length === 0 || input.plan.tasks.length === 0) {
+                throw new EmptyPlanError(`materialize: 团队 "${input.teamId}" 不可运行：至少需要一名成员和一个任务（成员 ${input.plan.members.length}，任务 ${input.plan.tasks.length}）`);
+            }
             // Materializing an already-approved plan is idempotent-guarded by the
             // team id: a second delivery of the same approval (same stateRoot +
             // sanitized teamId) must never clobber the live team.

@@ -4,9 +4,77 @@
  * record and lets the host settle the state; local UI never guesses.
  * @module dsh-sophia-entities/client/sophia-approval-requests
  */
+import { zh } from "./locales.js";
 import { APPROVALS_STATE_URL } from "./sophia-approval-badge.js";
 /** POST body target for approval-plan actions (design §4.4.2 / routes.ts). */
 export const APPROVALS_PLAN_URL = '/plugins/dsh-sophia-entities/approvals/plan';
+/** Locale key that renders each known refusal. */
+export const APPROVAL_REFUSAL_KEYS = {
+    not_awaiting_owner: 'approval.error.notAwaitingOwner',
+    not_awaiting_captain: 'approval.error.notAwaitingCaptain',
+    captain_only: 'approval.error.captainOnly',
+    human_only: 'approval.error.humanOnly',
+    empty_plan: 'approval.error.emptyPlan',
+    materialize_failed: 'approval.error.materializeFailed',
+};
+/** Wording for a refusal the host gave no code for, and for anything raw. */
+export const APPROVAL_ERROR_GENERIC_KEY = 'approval.error.generic';
+const APPROVAL_REFUSAL_CODES = new Set(Object.keys(APPROVAL_REFUSAL_KEYS));
+/** Narrow the host's `code` field to the refusals this build knows. */
+export function approvalRefusalCode(value) {
+    return typeof value === 'string' && APPROVAL_REFUSAL_CODES.has(value)
+        ? value
+        : undefined;
+}
+/**
+ * One refused plan action, carrying wording the UI is allowed to show.
+ *
+ * `message` is Simplified Chinese — the dictionary's source of truth — so a
+ * caller with no translator still renders a sentence rather than the host's
+ * own text; `messageKey` is what a localized surface renders instead. The
+ * host's raw sentence survives as `hostMessage` for logs only.
+ */
+export class ApprovalPlanError extends Error {
+    /** The refusal code, when the host named one this build knows. */
+    code;
+    /** The state the host reported for the request, when it reported one. */
+    state;
+    /** HTTP status of the refused response. */
+    status;
+    /** Locale key a translated surface renders. */
+    messageKey;
+    /** The host's own `error` string; diagnostics only, never the UI. */
+    hostMessage;
+    constructor(status, code, state, hostMessage) {
+        const messageKey = code === undefined ? APPROVAL_ERROR_GENERIC_KEY : APPROVAL_REFUSAL_KEYS[code];
+        super(zh[messageKey]);
+        this.name = 'ApprovalPlanError';
+        this.code = code;
+        this.state = state;
+        this.status = status;
+        this.messageKey = messageKey;
+        this.hostMessage = hostMessage;
+    }
+}
+/** Sentences that name host internals instead of telling the user anything. */
+const UNSAFE_APPROVAL_TEXT = [
+    /is not awaiting/i,
+    /pending_(?:owner|captain)/i,
+    /\brequest\s+[0-9a-f]{4,}/i,
+    /\bHTTP\s*\d{3}\b/i,
+];
+/**
+ * Keep a string the UI may show. Anything that would leak a state name, a
+ * request id or a bare HTTP status becomes the generic wording instead.
+ */
+export function sanitizeApprovalMessage(message) {
+    const text = message.trim();
+    if (text === '')
+        return zh[APPROVAL_ERROR_GENERIC_KEY];
+    return UNSAFE_APPROVAL_TEXT.some((pattern) => pattern.test(text))
+        ? zh[APPROVAL_ERROR_GENERIC_KEY]
+        : text;
+}
 /** Fold the host's snake_case result body into the card's result shape. */
 function parsePlanResult(body) {
     if (typeof body !== 'object' || body === null)
@@ -27,8 +95,9 @@ function parsePlanResult(body) {
 }
 /**
  * Fire one approval-plan action at the host. Mirrors the AgentTeams plan
- * mutation fetch (`mutatePlan`): posts JSON, throws with the host's error
- * message (or an HTTP status) on any non-ok response.
+ * mutation fetch (`mutatePlan`): posts JSON and rejects with an
+ * `ApprovalPlanError` on any non-ok response. The host's own sentence stays on
+ * that error as `hostMessage`; what the UI renders is the mapped wording.
  *
  * `sessionId` is the session the card is rendered in, and it is REQUIRED: the
  * host route authenticates the browser as the human operator but still refuses
@@ -51,14 +120,19 @@ export async function postApprovalPlanAction(sessionId, payload) {
         body: JSON.stringify({ ...payload, sessionId: owner }),
     });
     if (!response.ok) {
-        let message = `HTTP ${response.status}`;
+        let hostMessage;
+        let code;
+        let state;
         try {
             const body = await response.json();
             if (typeof body.error === 'string' && body.error.trim() !== '')
-                message = body.error;
+                hostMessage = body.error;
+            code = approvalRefusalCode(body.code);
+            if (typeof body.state === 'string')
+                state = body.state;
         }
         catch { }
-        throw new Error(message);
+        throw new ApprovalPlanError(response.status, code, state, hostMessage);
     }
     try {
         return parsePlanResult(await response.json());
@@ -101,7 +175,14 @@ export async function fetchApprovalRequestState(requestId) {
         return undefined;
     }
 }
-/** Normalize an unknown thrown value into a displayable message. */
-export function approvalErrorMessage(error) {
-    return error instanceof Error ? error.message : String(error);
+/**
+ * Normalize an unknown thrown value into wording the UI may show: a refusal
+ * renders through `t` when the caller has a translator, and everything else is
+ * scrubbed of host internals before it reaches a surface.
+ */
+export function approvalErrorMessage(error, t) {
+    if (error instanceof ApprovalPlanError) {
+        return t === undefined ? error.message : t(error.messageKey);
+    }
+    return sanitizeApprovalMessage(error instanceof Error ? error.message : String(error));
 }

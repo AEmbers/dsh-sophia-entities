@@ -253,6 +253,14 @@ export const zh = {
     'approval.review.reject': '拒绝',
     'approval.badge.title': '待审批',
     'approval.badge.label': '{count} 个团队提议等待批准',
+    'approval.row.waitingCaptain': '等待队长审核',
+    'approval.error.notAwaitingOwner': '该提议已不在主人审批阶段，操作未生效',
+    'approval.error.notAwaitingCaptain': '该提议已不在队长审核阶段，操作未生效',
+    'approval.error.captainOnly': '该操作只能由队长执行',
+    'approval.error.humanOnly': '该操作只能由主人执行',
+    'approval.error.emptyPlan': '该提议没有可执行的计划（成员与任务为空），无法批准',
+    'approval.error.materializeFailed': '团队创建失败，提议仍在待批队列，可重试',
+    'approval.error.generic': '操作未生效，请稍后重试',
 };
 /** English dictionary, checked complete against the Chinese source key set. */
 export const en = {
@@ -506,4 +514,12 @@ export const en = {
     'approval.review.reject': 'Reject',
     'approval.badge.title': 'Awaiting approval',
     'approval.badge.label': '{count} team proposal(s) awaiting approval',
+    'approval.row.waitingCaptain': 'Awaiting captain review',
+    'approval.error.notAwaitingOwner': 'This proposal is no longer awaiting your decision, so nothing changed',
+    'approval.error.notAwaitingCaptain': 'This proposal is no longer awaiting the captain’s review, so nothing changed',
+    'approval.error.captainOnly': 'Only the captain can perform this action',
+    'approval.error.humanOnly': 'Only the owner can perform this action',
+    'approval.error.emptyPlan': 'This proposal has no executable plan — its roster and tasks are empty — so it cannot be approved',
+    'approval.error.materializeFailed': 'The team could not be created; the proposal is still queued, so you can try again',
+    'approval.error.generic': 'The action did not take effect. Please try again.',
 };

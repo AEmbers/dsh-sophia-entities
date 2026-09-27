@@ -22,7 +22,9 @@
  * the state root follows the captain's workspace and the captain is only known
  * once a session actually decides. Fields present on the passed `ctx` win over
  * the provider's. `create` throws loudly when `captain`/`stateRoot` are absent
- * (host wiring bug, not a silent no-op); `describe`/`list` degrade to
+ * (host wiring bug, not a silent no-op); it also refuses a plan that could not
+ * run — no members, or no tasks — with a coded `empty_plan` error, before
+ * anything reaches the state root. `describe`/`list` degrade to
  * `undefined`/`[]` without a state root.
  */
 import type { Agent } from '@deepseek-ai/dsh-agent';

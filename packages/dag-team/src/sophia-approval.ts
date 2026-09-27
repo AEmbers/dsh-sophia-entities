@@ -35,7 +35,7 @@ import { sophiaDagBackendFor } from './sophia-dag-backend.ts'
 import { CAPTAIN_KEY, findTeamByParticipant, readTeam } from './state.ts'
 import { sessionOwnEvents } from './harness-compat.ts'
 import { readJsonRequest, RequestBodyError, type WebRouteHost } from './web-routes.ts'
-import { snapshotApprovals, runApprovalPlanAction, type ApprovalPlanAction } from 'dsh-sophia-entities/orchestration/routes'
+import { snapshotApprovals, runApprovalPlanAction, toApprovalHttpError, type ApprovalPlanAction } from 'dsh-sophia-entities/orchestration/routes'
 import {
   type NotifierHost,
   createApprovalChannels,
@@ -77,6 +77,13 @@ interface AgentTeamHostLike {
  * in members.ts, which is not exported). Used to measure delegation depth.
  */
 const MEMBER_LABEL_PREFIX = 'agent-teams:'
+
+/**
+ * Background cadence of the approval expiry sweep. Low frequency on purpose:
+ * the read path already reconciles on every poll, so this only has to keep the
+ * queue moving when nobody is looking at it.
+ */
+const SWEEP_INTERVAL_MS = 60_000
 
 /**
  * Deterministic ledger-namespace fallback when no workspace registry is
@@ -190,6 +197,35 @@ function buildApprovalPlane(
     dagHost.stateRoot = join(agent.session.header.cwd ?? workingDirectory, resolved.stateDir)
   }
 
+  // Expiry sweeper (§4.5). The timeout table is what moves a request out of the
+  // two states that have no exit of their own — `pending_captain` with no
+  // captain able to decide, and `pending_owner` nobody was told about — so it
+  // has to run in production, repeatedly. Nothing called `sweepExpired` at all
+  // before this: requests passed their deadline and stayed on the queue forever,
+  // which is exactly how a member proposal ended up wedged.
+  //
+  // Two triggers, deliberately:
+  //   - the approval-queue read path (`snapshotApprovals`, the GET handler's
+  //     first step) reconciles before rendering, so a poll can never show an
+  //     expired row — the guarantee is observable inside a single poll;
+  //   - this timer keeps the queue moving while no panel is open.
+  // A one-shot sweep at startup would be a fake fix (it only postpones the same
+  // stale row), and each sweep is idempotent per state, so running both costs
+  // nothing. The cleanup function stops the timer with the plugin context.
+  ctx.effect(() => {
+    const sweep = (): void => {
+      void facade.sweepExpired().catch((error: unknown) => {
+        ctx.logger.warn(`agent-teams: approval expiry sweep failed: ${String(error)}`)
+      })
+    }
+    // Catch-up immediately: requests may have expired while the host was down.
+    sweep()
+    const timer = setInterval(sweep, SWEEP_INTERVAL_MS)
+    // Never hold the host process open just for the sweep.
+    timer.unref?.()
+    return () => clearInterval(timer)
+  }, 'agent-teams: approval expiry sweeper')
+
   registerApprovalTools(ctx, {
     facade,
     resolveCaller: resolveCallerFor(ctx, resolved),
@@ -226,6 +262,11 @@ function buildApprovalPlane(
  * caller is the Human owner; the human session id rides in the request body
  * exactly like the halt route's `sessionId` and is rejected with 409 when it
  * is not attached. Registering is idempotent per web server via `ctx.effect`.
+ *
+ * Failure shape of the plan route (frozen): a refusal the approval plane can
+ * name is a 409 with `{ error, code, state? }`, where `error` is Chinese text
+ * keyed by `code` (`toApprovalHttpError`); an unknown failure is a 500 with a
+ * generic Chinese message and the raw error only in the log.
  */
 export function registerApprovalRoutes(
   ctx: Context,
@@ -250,6 +291,11 @@ export function registerApprovalRoutes(
         return
       }
       try {
+        // `snapshotApprovals` reconciles expiry (the §4.5 sweep) before it reads,
+        // so this queue can never render a row that is already past its
+        // deadline: the poll that would have shown it is the poll that retires
+        // or escalates it first. The background timer in `buildApprovalPlane`
+        // covers the periods with no poll at all.
         const snapshot = await snapshotApprovals(facade)
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
         res.end(JSON.stringify(snapshot))
@@ -306,9 +352,16 @@ export function registerApprovalRoutes(
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
         res.end(JSON.stringify(result))
       } catch (error: unknown) {
-        ctx.logger.warn(`agent-teams: approval plan action failed: ${String(error)}`)
-        res.writeHead(500, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-        res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'approval plan action failed' }))
+        // A coded domain refusal (already decided, not your call, empty plan)
+        // is a 409 the card can explain in Chinese; only an unknown failure is
+        // a 500. The raw error text stays in the log — the response body never
+        // carries it, so the card can never show a bare English message.
+        const mapped = toApprovalHttpError(error)
+        ctx.logger.warn(
+          `agent-teams: approval plan action failed (${mapped.status}${mapped.body.code === undefined ? '' : ` ${mapped.body.code}`}): ${String(error)}`,
+        )
+        res.writeHead(mapped.status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+        res.end(JSON.stringify(mapped.body))
       }
     },
   }), 'agent-teams: approvals plan route')

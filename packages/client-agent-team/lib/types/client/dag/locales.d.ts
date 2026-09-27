@@ -253,6 +253,14 @@ export declare const zh: {
     'approval.review.reject': string;
     'approval.badge.title': string;
     'approval.badge.label': string;
+    'approval.row.waitingCaptain': string;
+    'approval.error.notAwaitingOwner': string;
+    'approval.error.notAwaitingCaptain': string;
+    'approval.error.captainOnly': string;
+    'approval.error.humanOnly': string;
+    'approval.error.emptyPlan': string;
+    'approval.error.materializeFailed': string;
+    'approval.error.generic': string;
 };
 /** AgentTeams namespace key union. */
 export type AgentTeamsLocaleKey = keyof typeof zh;
@@ -508,6 +516,14 @@ export declare const en: {
     'approval.review.reject': string;
     'approval.badge.title': string;
     'approval.badge.label': string;
+    'approval.row.waitingCaptain': string;
+    'approval.error.notAwaitingOwner': string;
+    'approval.error.notAwaitingCaptain': string;
+    'approval.error.captainOnly': string;
+    'approval.error.humanOnly': string;
+    'approval.error.emptyPlan': string;
+    'approval.error.materializeFailed': string;
+    'approval.error.generic': string;
 };
 /** Translation function consumed by pure view helpers. */
 export type AgentTeamsTranslate = (key: AgentTeamsLocaleKey, params?: Record<string, unknown>) => string;

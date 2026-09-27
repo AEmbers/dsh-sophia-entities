@@ -35,6 +35,11 @@ import type { AgentTeamsTranslate } from './locales.ts';
  * it and the badge's click had nowhere to go. The panel is always mounted, so
  * it reads the same host queue the badge polls and offers the owner controls
  * here — one durable place to approve, independent of chat scrollback.
+ *
+ * Only a `pending_owner` row is the owner's to decide. A `pending_captain` row
+ * is waiting on the captain, so it renders a non-interactive label: showing
+ * [批准][退回] there answered every click with the host's refusal, because the
+ * owner route is not the route that settles it.
  */
 export declare function PendingApprovals({ sessionId, onRows, placement, t }: {
     readonly sessionId: string;
