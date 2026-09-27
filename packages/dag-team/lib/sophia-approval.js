@@ -58,7 +58,14 @@ export function installSophiaApprovalPlane(ctx, options) {
     return handle;
 }
 function buildApprovalPlane(ctx, { runtime, resolved }) {
-    const workspaceRegistry = (ctx.get(WORKSPACE_KEYS[0]) ?? ctx.get(WORKSPACE_KEYS[1]));
+    // The workspace registry binds AFTER this plane is built — `dag-team` reads it
+    // lazily everywhere else for exactly that reason (registerWebSurface retries on
+    // `internal/service`). Resolving the caller workspace once, here, therefore saw
+    // no registry at all: the path fell back to the process cwd and the id to the
+    // `default` placeholder, so every persistent approval died in the host with
+    // `unknown Workspace 'default'`. Read it fresh for each answer instead.
+    const readWorkspaceRegistry = () => (ctx.get(WORKSPACE_KEYS[0]) ?? ctx.get(WORKSPACE_KEYS[1]));
+    const workspaceRegistry = readWorkspaceRegistry();
     // The caller workspace path when determinable (registry match on cwd, else
     // the registry's primary workspace), otherwise the process cwd.
     const workingDirectory = resolveWorkingDirectory(workspaceRegistry);
@@ -69,7 +76,9 @@ function buildApprovalPlane(ctx, { runtime, resolved }) {
         stateRoot: join(workingDirectory, resolved.stateDir),
     };
     const dagBackend = sophiaDagBackendFor(runtime, () => dagHost);
-    const persistentBackend = createLazyPersistentBackend(ctx, workspaceRegistry, workingDirectory);
+    const persistentBackend = createLazyPersistentBackend(ctx, 
+    // Read fresh per call: the registry binds after this plane is built.
+    readWorkspaceRegistry, workingDirectory);
     const orchestrationHost = {
         memberIdOf: (caller) => caller?.sessionId,
         handleOf: (caller) => caller?.handle,
@@ -423,18 +432,27 @@ function buildNotifierHost(ctx) {
         },
     };
 }
-function createLazyPersistentBackend(ctx, registry, workingDirectory) {
+function createLazyPersistentBackend(ctx, resolveRegistry, workingDirectory) {
     let backend;
+    let boundWorkspaceId;
     const resolveBackend = () => {
-        if (backend === undefined) {
-            const host = ctx.get('agentTeam');
-            if (host === undefined) {
-                throw new Error('sophia approval: persistent materialization requires the agent-team host service (ctx "agentTeam")');
-            }
+        // The workspace registry binds AFTER this plane is built (the plugin reads
+        // it lazily elsewhere for exactly that reason), so resolving the id once at
+        // build time fell through to the `default` placeholder and every persistent
+        // approval then died in the host with `unknown Workspace 'default'`. Resolve
+        // per call and rebuild when the answer changes — the backend captures the
+        // id at construction, so a late-binding registry needs a fresh instance.
+        const host = ctx.get('agentTeam');
+        if (host === undefined) {
+            throw new Error('sophia approval: persistent materialization requires the agent-team host service (ctx "agentTeam")');
+        }
+        const workspaceId = resolveWorkspaceId(resolveRegistry(), workingDirectory);
+        if (backend === undefined || boundWorkspaceId !== workspaceId) {
             // Bridge through the target deps shape; the parameter-type cast keeps
             // this compile-stable while the persistent-backend rework lands.
             const deps = createSophiaPersistentBackend;
-            backend = deps({ host, workspaceId: resolveWorkspaceId(registry, workingDirectory) });
+            backend = deps({ host, workspaceId });
+            boundWorkspaceId = workspaceId;
         }
         return backend;
     };
