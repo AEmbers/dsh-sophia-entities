@@ -38,6 +38,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectArchivedTeamsActivity, collectTeamsActivity, persistentTeamSnapshot } from './snapshot.ts'
+import type { TeamMemberRow } from 'dsh-sophia-entities/orchestration/types'
 import { findTeamByCaptain } from './state.ts'
 import { formatProfilesForPrompt, type TeamProfileConfig } from './profiles.ts'
 import { installTeamCapabilities } from './capabilities.ts'
@@ -252,7 +253,15 @@ export function apply(ctx: Context, config: Config): void {
           const workingRoot = roots.find(root => root.stateRoot === join(approvalHandle.workingDirectory, resolved.stateDir))
           const workspaceLabel = workingRoot?.workspace ?? approvalHandle.workingDirectory
           for (const summary of persistent) {
-            snapshots.push(persistentTeamSnapshot(workspaceLabel, summary))
+            // Row detail is optional: a host without `members()` keeps the
+            // volume card, so a failed read degrades instead of losing the team.
+            let rows: readonly TeamMemberRow[] | undefined
+            try {
+              rows = await approvalHandle.persistentBackend.membersOf?.(ctx, summary.teamId)
+            } catch (error: unknown) {
+              ctx.logger.warn(`agent-teams: persistent member rows failed: ${String(error)}`)
+            }
+            snapshots.push(persistentTeamSnapshot(workspaceLabel, summary, rows))
           }
         } catch (error: unknown) {
           ctx.logger.warn(`agent-teams: persistent team blend failed: ${String(error)}`)

@@ -659,7 +659,47 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
         {team.mode === 'persistent' ? (
           <section className={css.persistentCard} aria-label={t('team.persistent.aria')}>
             <h3 className={css.persistentHeading}>{t('team.persistent.heading')}</h3>
-            <p className={css.persistentStat}>{t('team.persistent.members', { count: team.memberCount ?? 0 })}</p>
+            {/* Member ROWS whenever the ledger could answer with them, because a
+                row draws the member's OC portrait (`memberArtUrl` matches the
+                planned role text) — the whole point of naming members after the
+                twenty posts. The two counts stay as the honest fallback for a
+                ledger that exposes volumes only. */}
+            {team.members.length > 0 ? (
+              <ul className={css.persistentMembers} data-persistent-members={team.members.length}>
+                {team.members.map((member) => {
+                  const art = memberArtUrl(member.name, member.role)
+                  const model = member.model ?? ''
+                  return (
+                    <li key={member.id} className={css.memberRow} data-persistent-member={member.id}>
+                      <span className={css.memberAvatar}>
+                        {art !== null ? (
+                          <img className={css.memberArt} src={art} alt="" aria-hidden />
+                        ) : (
+                          <span className={css.memberInitial} style={{ background: accentOf(member.id) }}>
+                            {memberInitial(member.name)}
+                          </span>
+                        )}
+                      </span>
+                      <span className={css.memberInfo}>
+                        <span className={css.memberLine}>
+                          <span className={css.memberName}>{member.name}</span>
+                          {member.role !== '' && <span className={css.memberRole}>{member.role}</span>}
+                          {model !== '' && (
+                            <span className={css.memberModel} role="img" data-member-model={model} title={model} aria-label={model}>
+                              {compactModelLabel(model)}
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <>
+                <p className={css.persistentStat}>{t('team.persistent.members', { count: team.memberCount ?? 0 })}</p>
+              </>
+            )}
             <p className={css.persistentStat}>{t('team.persistent.tasks', { count: team.taskCount ?? 0 })}</p>
           </section>
         ) : (

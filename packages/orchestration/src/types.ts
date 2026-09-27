@@ -137,6 +137,26 @@ export interface TeamSummary {
   createdAt: number
 }
 
+/**
+ * One member row of a backend team, for row-drawing surfaces.
+ *
+ * `name` and `role` are the two strings the client's OC artwork table matches
+ * against (`memberArtUrl(name, role)`), so both must survive from the plan
+ * verbatim: a renamed or localized label loses the portrait.
+ */
+export interface TeamMemberRow {
+  /** Durable member id when the backend has one; else a stable display key. */
+  id: string
+  /** Display name — what the member is called in the plan and on the row. */
+  name: string
+  /** Role text the plan assigned; this is what selects the OC portrait. */
+  role: string
+  /** Backend lifecycle word, already human-readable for the row. */
+  state: string
+  /** Model selection label when known. */
+  model?: string
+}
+
 /** Filter passed to `facade.list`. */
 export interface TeamFilter {
   mode?: TeamMode
@@ -171,6 +191,17 @@ export interface TeamBackend {
   describe(ctx: unknown, teamRef: string): Promise<TeamSummary | undefined>
   /** List every team this backend currently owns for the workspace. */
   list(ctx: unknown): Promise<TeamSummary[]>
+  /**
+   * Per-row members of one team, for surfaces that draw rows rather than the
+   * volume card. Optional: a backend whose source exposes no row detail (or one
+   * that has not implemented it yet) simply omits the method, and callers fall
+   * back to `describe`'s counts.
+   *
+   * The returned `role` is what the client matches OC artwork against, so a
+   * backend should return the role text it planned verbatim (not a translated
+   * label) — see `memberArtUrl` in the client package.
+   */
+  membersOf?(ctx: unknown, teamRef: string): Promise<readonly TeamMemberRow[]>
 }
 
 /** Host-side guesses that tools need; injected so the layer stays testable. */

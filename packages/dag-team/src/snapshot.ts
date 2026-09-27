@@ -12,7 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { memberActivity } from './members.ts'
-import type { TeamSummary } from 'dsh-sophia-entities/orchestration/types'
+import type { TeamMemberRow, TeamSummary } from 'dsh-sophia-entities/orchestration/types'
 import {
   CAPTAIN_KEY, listArchivedTeamIds, readArchivedTeam, readUnreadMailbox, readTeam,
   taskDepthsById, taskVisualState,
@@ -234,6 +234,7 @@ export async function assembleTeamSnapshot(
 export function persistentTeamSnapshot(
   workspace: string,
   summary: TeamSummary,
+  rows?: readonly TeamMemberRow[],
 ): TeamActivitySnapshot {
   return Object.freeze({
     workspace,
@@ -242,7 +243,27 @@ export function persistentTeamSnapshot(
     captainSessionId: '',
     phase: 'running',
     mode: 'persistent',
-    members: Object.freeze([]),
+    // Ledger members carry no per-row activity (no progress, no current task,
+    // no unread counter) — the ledger simply does not record it. So a row is
+    // filled with the fields it CAN source and neutral values elsewhere, which
+    // lets the panel draw the member with its OC portrait instead of falling
+    // back to a volume card. Absent rows keep the original minimal snapshot.
+    members: Object.freeze((rows ?? []).map(row => Object.freeze({
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      provider: '',
+      model: row.model ?? '',
+      reasoningEffort: '',
+      executionPrompt: '',
+      status: (row.state === 'inactive' || row.state === 'archived' ? 'removed' : 'idle') as MemberStatus,
+      activity: 'unknown' as const,
+      progress: 0,
+      done: 0,
+      total: 0,
+      currentTask: '',
+      unread: 0,
+    }))),
     tasks: Object.freeze([]),
     messageCount: 0,
     captainInbox: Object.freeze([]),

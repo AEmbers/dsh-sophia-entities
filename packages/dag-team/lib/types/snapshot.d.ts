@@ -8,7 +8,7 @@
  * @module dsh-agent-teams/snapshot
  */
 import type { Context } from '@deepseek-ai/cordis';
-import type { TeamSummary } from 'dsh-sophia-entities/orchestration/types';
+import type { TeamMemberRow, TeamSummary } from 'dsh-sophia-entities/orchestration/types';
 import type { MemberStatus, TeamState } from './types.ts';
 /** Team kind carried on the activity snapshot (design §4.7, P4.3). */
 export type ActivityTeamMode = 'persistent' | 'dag';
@@ -114,7 +114,7 @@ export declare function assembleTeamSnapshot(ctx: Context, stateRoot: string, wo
  * @param summary - the persistent `TeamSummary` from the ledger backend.
  * @returns the minimal persistent activity snapshot.
  */
-export declare function persistentTeamSnapshot(workspace: string, summary: TeamSummary): TeamActivitySnapshot;
+export declare function persistentTeamSnapshot(workspace: string, summary: TeamSummary, rows?: readonly TeamMemberRow[]): TeamActivitySnapshot;
 /**
  * Collect every team under the given workspace state roots.
  * @param ctx - the plugin context.

@@ -11,6 +11,46 @@ import { MEMBER_TOOL_NAMES, TEAM_TOOL_NAMES } from './tool-names.ts'
 export const TEAM_ACTIVATION_PROMPT = 'AgentTeams (Agent Teams) provides multi-agent team collaboration. Apply these rules when the user requests it (including /agent-teams) or when continuing an existing team. Mentioning, quoting, discussing, or declining AgentTeams alone is not a request to start work.'
 export const TEAM_MEMBER_PROMPT = 'You are an AgentTeams member. Follow your assigned member persona and task contract. Use agent_teams_claim_task, agent_teams_update_task, agent_teams_send_message and agent_teams_status for your own work. Include the current attempt_id in updates; report completion or failure to the captain. Do not create, approve, edit or resume a team. If your durable membership is unavailable, report that to the parent instead of creating a replacement.'
 
+/**
+ * The twenty posts a member name or role is drawn from, paired with the OC
+ * portrait each one wears.
+ *
+ * The client resolves a member's artwork by matching its `name` and `role`
+ * against these words (`memberArtUrl` in `packages/client-agent-team`), so a
+ * roster that invents names outside this list renders as a bare initial
+ * instead of a portrait. Naming is therefore not cosmetic: use a post here —
+ * spelled as one of its listed words — for `member.name` or `member.role`.
+ *
+ * Kept in sync with `OC_ROLE_ART` in
+ * `packages/client-agent-team/src/client/dag/artwork.ts`, which is the
+ * authority; `tests/capabilities.spec.ts` pins the pairing.
+ */
+export const TEAM_POST_ROSTER = [
+  '钦天监监正',
+  '灵台主事',
+  '时宪主事',
+  '典籍掌事',
+  '星禁掌察',
+  '观象访事',
+  '星图主事',
+  '象绘主事',
+  '星绘主事',
+  '传报主事',
+  '灵台郎',
+  '历算主事',
+  '星仪主事',
+  '数象主事',
+  '推步主事',
+  '星验主事',
+  '星机校验',
+  '天象值守',
+  '星文审校',
+  '录典主事',
+] as const
+
+/** The naming rule appended to the captain prompt (see `TEAM_POST_ROSTER`). */
+export const TEAM_NAMING_RULE = `用下面二十个岗位名给每个成员命名，成员头像就是按这个名字匹配的；名单之外的名字只会显示成一个光秃秃的姓名字头。请把岗位名写进 \`member.name\`（\`member.role\` 可写该岗位对应的现代岗位，如「后端开发工程师」）：${TEAM_POST_ROSTER.join('、')}。`
+
 interface Exposure {
   member: boolean
   dispose: () => void
@@ -54,7 +94,7 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
   let mounted = true
   // Snapshot policy once: profiles, team state, and tool results must never
   // rewrite this prefix or control whether core instructions are available.
-  const captainPrompt = `${TEAM_ACTIVATION_PROMPT}\n\n${config.captainPrompt()}`
+  const captainPrompt = `${TEAM_ACTIVATION_PROMPT}\n\n${TEAM_NAMING_RULE}\n\n${config.captainPrompt()}`
 
   function attach(agent: Agent): Exposure {
     const prior = states.get(agent)

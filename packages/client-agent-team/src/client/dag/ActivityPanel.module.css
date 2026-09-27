@@ -346,6 +346,27 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* Member rows inside the persistent card. The ledger cannot supply per-row
+   activity, so these rows carry identity only — avatar, name, role, model —
+   and deliberately omit the progress bar and the action badge the DAG rows
+   have, rather than drawing zeroes that would read as real measurements. */
+.persistentMembers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.persistentMembers .memberRow {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: default;
+  padding: 0;
+}
+
 .teamHead {
   display: flex;
   align-items: center;
