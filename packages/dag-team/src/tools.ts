@@ -95,6 +95,13 @@ export interface ToolsConfig {
   memberMaxDepth?: number
   /** Team size cap (members). */
   maxMembers: number
+  /**
+   * Intended standing-organisation size, checked against the HOST's own
+   * `maxMembers` before a plan is filed so an oversized roster fails with an
+   * actionable message rather than a bare host rejection. Defaults to
+   * `maxMembers` when unset.
+   */
+  teamSize?: number
   /** Named team profiles from the active DSH profile. */
   profiles: Record<string, import('./profiles.ts').TeamProfileConfig>
 }

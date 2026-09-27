@@ -74,6 +74,17 @@ export interface Config {
   memberMaxDepth?: number
   /** Team size cap in members (default `8`). */
   maxMembers?: number
+  /**
+   * Intended size of the standing organisation, in members (default: same as
+   * `maxMembers`).
+   *
+   * This is the number the owner actually wants staffed — the 钦天监 org tree
+   * implies 20 AI posts, with the Human owner NOT counted among them. It is
+   * checked against the hosting `agent-team` plugin's own `maxMembers` before a
+   * proposal is filed, so an oversized roster reports which two numbers
+   * disagree instead of failing inside the host with a bare rejection.
+   */
+  teamSize?: number
   /** Named multi-role team profiles. */
   profiles?: Record<string, TeamProfileConfig>
   /** Prompt-section order for the usage policy (default `117`, after delegation policy). */
@@ -132,6 +143,18 @@ export const Config: z<Config> = z.object({
   })).default({}),
   memberMaxDepth: z.natural().default(0),
   maxMembers: z.natural().min(1).default(8),
+  /**
+   * How many members the owner wants the standing organisation to hold.
+   *
+   * Distinct from `maxMembers`, which is the hard cap on what this plugin will
+   * ever accept. `teamSize` is the intended size — the roster the 钦天监 org
+   * tree implies (20 posts) — and it is what gets checked against the HOST's
+   * own cap before a proposal is filed, so an oversized plan fails with an
+   * actionable message instead of a bare host rejection.
+   *
+   * Defaults to `maxMembers` so existing installations behave as before.
+   */
+  teamSize: z.natural().min(1).default(8),
   promptSectionOrder: z.natural().default(117),
   slashCommand: z.boolean().default(true),
 })
@@ -161,6 +184,7 @@ export function apply(ctx: Context, config: Config): void {
     fallback: config.fallback,
     memberMaxDepth: config.memberMaxDepth ?? 0,
     maxMembers: config.maxMembers ?? 8,
+    teamSize: config.teamSize ?? config.maxMembers ?? 8,
     profiles: config.profiles ?? {},
   }
 
