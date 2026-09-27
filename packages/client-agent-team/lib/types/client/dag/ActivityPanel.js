@@ -122,7 +122,7 @@ function taskTone(state, status) {
  * it reads the same host queue the badge polls and offers the owner controls
  * here — one durable place to approve, independent of chat scrollback.
  */
-function PendingApprovals({ sessionId, onRows, t }) {
+export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }) {
     const [rows, setRows] = useState([]);
     const [busyId, setBusyId] = useState();
     const [error, setError] = useState();
@@ -148,7 +148,7 @@ function PendingApprovals({ sessionId, onRows, t }) {
     };
     if (rows.length === 0)
         return null;
-    return (_jsx("section", { className: css.approvals, "aria-label": t('approval.badge.title'), "data-pending-approvals": rows.length, children: rows.map((row) => (_jsxs("article", { className: css.approvalRow, "data-request-id": row.id, "data-mode": row.mode ?? 'unset', children: [_jsx("span", { className: css.approvalGoal, children: row.goal }), _jsx("span", { className: css.approvalMeta, children: t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`) }), error !== undefined && busyId === undefined && (_jsx("span", { className: css.approvalError, role: "alert", children: error })), _jsxs("span", { className: css.approvalActions, children: [_jsx("button", { type: "button", className: css.approvalApprove, disabled: busyId !== undefined, onClick: () => { act(row.id, 'approve'); }, children: t('approval.approve') }), _jsx("button", { type: "button", className: css.approvalReject, disabled: busyId !== undefined, onClick: () => { act(row.id, 'reject'); }, children: t('approval.reject') })] })] }, row.id))) }));
+    return (_jsx("section", { className: placement === 'surface' ? `${css.approvals} ${css.approvalsSurface}` : css.approvals, "aria-label": t('approval.badge.title'), "data-pending-approvals": rows.length, children: rows.map((row) => (_jsxs("article", { className: css.approvalRow, "data-request-id": row.id, "data-mode": row.mode ?? 'unset', children: [_jsx("span", { className: css.approvalGoal, children: row.goal }), _jsx("span", { className: css.approvalMeta, children: t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`) }), error !== undefined && busyId === undefined && (_jsx("span", { className: css.approvalError, role: "alert", children: error })), _jsxs("span", { className: css.approvalActions, children: [_jsx("button", { type: "button", className: css.approvalApprove, disabled: busyId !== undefined, onClick: () => { act(row.id, 'approve'); }, children: t('approval.approve') }), _jsx("button", { type: "button", className: css.approvalReject, disabled: busyId !== undefined, onClick: () => { act(row.id, 'reject'); }, children: t('approval.reject') })] })] }, row.id))) }));
 }
 function Chevron({ open }) {
     return (_jsx("svg", { className: css.chevron, "data-open": open, width: "9", height: "9", viewBox: "0 0 10 10", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", "aria-hidden": true, children: _jsx("path", { d: "M3.5 2l3 3-3 3" }) }));

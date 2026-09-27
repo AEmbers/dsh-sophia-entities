@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
-import { ActivityPanel, TeamSection, historicCardTeam, type ActivityPanelProps } from './ActivityPanel.tsx'
+import { ActivityPanel, PendingApprovals, TeamSection, historicCardTeam, type ActivityPanelProps } from './ActivityPanel.tsx'
 import { OPEN_PANEL_EVENT } from './AgentTeamsCard.tsx'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
 import { currentSessionId } from './session-navigation.ts'
@@ -110,6 +110,13 @@ export function WorkspaceActivity({ sessionId, useTabInfo, t, state, modelDirect
   }
   return (
     <div className={css.root} data-agent-teams-workspace data-session-id={sessionId}>
+      {/* The right pane is the surface that is actually mounted in this host
+          generation, so the owner's waiting proposals lead here. The in-chat
+          approval card only exists while its tool call is inside the loaded
+          chat window, which a long session has long since scrolled past. */}
+      <div className={css.approvalsHost}>
+        <PendingApprovals sessionId={sessionId} placement="surface" t={t} />
+      </div>
       <div className={css.content}>
         {status === 'error' && <div className={css.error} role="alert"><span>{t('workspace.error')}</span><button onClick={() => setRetry(value => value + 1)}>{t('workspace.retry')}</button></div>}
         {records.length > 1 && <nav className={css.selector} aria-label={t('workspace.title')}>

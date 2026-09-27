@@ -193,9 +193,11 @@ function taskTone(state: ActivityTask['state'], status: string): string {
  * it reads the same host queue the badge polls and offers the owner controls
  * here — one durable place to approve, independent of chat scrollback.
  */
-function PendingApprovals({ sessionId, onRows, t }: {
+export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }: {
   readonly sessionId: string
   readonly onRows?: (count: number) => void
+  /** `panel` sits inside the floater; `surface` leads the right-pane monitor. */
+  readonly placement?: 'panel' | 'surface'
   readonly t: AgentTeamsTranslate
 }) {
   const [rows, setRows] = useState<readonly SophiaApprovalSnapshotRow[]>([])
@@ -227,7 +229,11 @@ function PendingApprovals({ sessionId, onRows, t }: {
   if (rows.length === 0) return null
 
   return (
-    <section className={css.approvals} aria-label={t('approval.badge.title')} data-pending-approvals={rows.length}>
+    <section
+      className={placement === 'surface' ? `${css.approvals} ${css.approvalsSurface}` : css.approvals}
+      aria-label={t('approval.badge.title')}
+      data-pending-approvals={rows.length}
+    >
       {rows.map((row) => (
         <article key={row.id} className={css.approvalRow} data-request-id={row.id} data-mode={row.mode ?? 'unset'}>
           <span className={css.approvalGoal}>{row.goal}</span>
