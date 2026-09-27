@@ -44,6 +44,20 @@ export const TEAM_POST_ROSTER = [
 ];
 /** The naming rule appended to the captain prompt (see `TEAM_POST_ROSTER`). */
 export const TEAM_NAMING_RULE = `用下面二十个岗位名给每个成员命名，成员头像就是按这个名字匹配的；名单之外的名字只会显示成一个光秃秃的姓名字头。请把岗位名写进 \`member.name\`（\`member.role\` 可写该岗位对应的现代岗位，如「后端开发工程师」）：${TEAM_POST_ROSTER.join('、')}。`;
+/**
+ * The organisation the二十个岗位 form, appended to the captain prompt.
+ *
+ * A flat list of twenty posts says who may be staffed but not who answers to
+ * whom, and the captain is the one assembling a roster. The tree is loaded
+ * lazily through a parameter rather than imported here, because `org-tree.ts`
+ * already reads `TEAM_POST_ROSTER` from this module — importing it back would
+ * close a cycle.
+ * @param treeText - the rendered tree (`ORG_TREE_TEXT`).
+ * @returns the prompt section stating the reporting structure.
+ */
+export function orgRuleText(treeText) {
+    return `常驻编制按下面的组织结构安置；成员被 @ 到才动，收到活就自己开一个临时 DAG 团队去干，多个 DAG 互不打扰：\n${treeText}`;
+}
 function stateRoot(agent, config) {
     return join(agent.session.header.cwd ?? process.cwd(), config.stateDir);
 }
@@ -80,7 +94,7 @@ export function installTeamCapabilities(ctx, config) {
     let mounted = true;
     // Snapshot policy once: profiles, team state, and tool results must never
     // rewrite this prefix or control whether core instructions are available.
-    const captainPrompt = `${TEAM_ACTIVATION_PROMPT}\n\n${TEAM_NAMING_RULE}\n\n${config.captainPrompt()}`;
+    const captainPrompt = `${TEAM_ACTIVATION_PROMPT}\n\n${TEAM_NAMING_RULE}\n\n${orgRuleText(config.orgTreeText)}${config.captainPrompt() === '' ? '' : `\n\n${config.captainPrompt()}`}`;
     function attach(agent) {
         const prior = states.get(agent);
         if (prior !== undefined)

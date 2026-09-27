@@ -19,10 +19,28 @@ export declare const TEAM_MEMBER_PROMPT = "You are an AgentTeams member. Follow 
 export declare const TEAM_POST_ROSTER: readonly ["钦天监监正", "灵台主事", "时宪主事", "典籍掌事", "星禁掌察", "观象访事", "星图主事", "象绘主事", "星绘主事", "传报主事", "灵台郎", "历算主事", "星仪主事", "数象主事", "推步主事", "星验主事", "星机校验", "天象值守", "星文审校", "录典主事"];
 /** The naming rule appended to the captain prompt (see `TEAM_POST_ROSTER`). */
 export declare const TEAM_NAMING_RULE: string;
+/**
+ * The organisation the二十个岗位 form, appended to the captain prompt.
+ *
+ * A flat list of twenty posts says who may be staffed but not who answers to
+ * whom, and the captain is the one assembling a roster. The tree is loaded
+ * lazily through a parameter rather than imported here, because `org-tree.ts`
+ * already reads `TEAM_POST_ROSTER` from this module — importing it back would
+ * close a cycle.
+ * @param treeText - the rendered tree (`ORG_TREE_TEXT`).
+ * @returns the prompt section stating the reporting structure.
+ */
+export declare function orgRuleText(treeText: string): string;
 interface CapabilityConfig {
     stateDir: string;
     isPendingMember: (agent: Agent) => boolean;
     captainPrompt: () => string;
+    /**
+     * The rendered organisation tree, so the captain prompt can state the
+     * reporting structure. Passed in rather than imported: `org-tree.ts` reads
+     * `TEAM_POST_ROSTER` from this module, so importing it back would be a cycle.
+     */
+    orgTreeText: string;
     order?: number;
 }
 /** Call once, after all business definitions have registered. Never per member. */
