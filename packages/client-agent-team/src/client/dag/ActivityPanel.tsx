@@ -60,6 +60,8 @@ import {
 } from './activity-monitor.ts'
 import { ACTION_ART, LEAD_ART, memberArtUrl } from './artwork.ts'
 import { OPEN_PANEL_EVENT } from './AgentTeamsCard.tsx'
+import { startApprovalBadgePolling, type SophiaApprovalSnapshotRow } from './sophia-approval-badge.ts'
+import { postApprovalPlanAction } from './sophia-approval-requests.ts'
 import { StagingPlanEditor } from './StagingPlanEditor.tsx'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
 import type { AgentTeamsLocaleKey, AgentTeamsTranslate } from './locales.ts'
@@ -179,8 +181,87 @@ function taskTone(state: ActivityTask['state'], status: string): string {
   return state
 }
 
-function Chevron({ open }: { readonly open: boolean }) {
+/**
+ * Pending team proposals awaiting the Human owner, rendered INSIDE the activity
+ * panel.
+ *
+ * The in-conversation approval card only exists while its `sophia_team_propose`
+ * tool call is inside the loaded chat window (the host's assembler folds that
+ * window and nothing older), so a proposal filed earlier in a long session was
+ * unreachable: the badge counted it, but neither the card nor the panel showed
+ * it and the badge's click had nowhere to go. The panel is always mounted, so
+ * it reads the same host queue the badge polls and offers the owner controls
+ * here — one durable place to approve, independent of chat scrollback.
+ */
+function PendingApprovals({ sessionId, onRows, t }: {
+  readonly sessionId: string
+  readonly onRows?: (count: number) => void
+  readonly t: AgentTeamsTranslate
+}) {
+  const [rows, setRows] = useState<readonly SophiaApprovalSnapshotRow[]>([])
+  const [busyId, setBusyId] = useState<string | undefined>()
+  const [error, setError] = useState<string | undefined>()
+
+  useEffect(() => {
+    const controller = startApprovalBadgePolling(() => {}, {}, (next) => {
+      setRows(next)
+      onRows?.(next.length)
+    })
+    return () => { controller.stop() }
+  }, [onRows])
+
+  const act = (requestId: string, decision: 'approve' | 'reject'): void => {
+    setBusyId(requestId)
+    setError(undefined)
+    // The owner verdict is one action with the decision as its verb: approve
+    // carries its own `decision` field, reject is the bare verb.
+    const payload = decision === 'approve'
+      ? { action: 'approve' as const, requestId, decision: 'approve' as const }
+      : { action: 'reject' as const, requestId }
+    void postApprovalPlanAction(sessionId, payload)
+      .then(() => { setRows((current) => current.filter((row) => row.id !== requestId)) })
+      .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
+      .finally(() => { setBusyId(undefined) })
+  }
+
+  if (rows.length === 0) return null
+
   return (
+    <section className={css.approvals} aria-label={t('approval.badge.title')} data-pending-approvals={rows.length}>
+      {rows.map((row) => (
+        <article key={row.id} className={css.approvalRow} data-request-id={row.id} data-mode={row.mode ?? 'unset'}>
+          <span className={css.approvalGoal}>{row.goal}</span>
+          <span className={css.approvalMeta}>
+            {t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`)}
+          </span>
+          {error !== undefined && busyId === undefined && (
+            <span className={css.approvalError} role="alert">{error}</span>
+          )}
+          <span className={css.approvalActions}>
+            <button
+              type="button"
+              className={css.approvalApprove}
+              disabled={busyId !== undefined}
+              onClick={() => { act(row.id, 'approve') }}
+            >
+              {t('approval.approve')}
+            </button>
+            <button
+              type="button"
+              className={css.approvalReject}
+              disabled={busyId !== undefined}
+              onClick={() => { act(row.id, 'reject') }}
+            >
+              {t('approval.reject')}
+            </button>
+          </span>
+        </article>
+      ))}
+    </section>
+  )
+}
+
+function Chevron({ open }: { readonly open: boolean }) {  return (
     <svg className={css.chevron} data-open={open} width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
       <path d="M3.5 2l3 3-3 3" />
     </svg>
@@ -825,6 +906,9 @@ export function ActivityPanel({ sessionsList, modelDirectories, openMember, t, c
   const [wasActive, setWasActive] = useState(false)
   const [historic, setHistoric] = useState<ReadonlyMap<string, { data: AgentTeamsCardData; owner: string }>>(new Map())
   const [layout, setLayout] = useState<PanelLayout>(initialPanelLayout)
+  // A waiting proposal alone is enough reason to keep the panel open and to
+  // suppress the "no teams" hint: the approvals block IS panel content.
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0)
   const [bounds, setBounds] = useState<PanelBounds>(initialPanelBounds)
   const [interaction, setInteraction] = useState<'dragging' | 'resizing' | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
@@ -1214,12 +1298,15 @@ export function ActivityPanel({ sessionsList, modelDirectories, openMember, t, c
     transform: `translate3d(${geometry.x}px, ${geometry.y}px, 0)`,
   }
 
-  if (!conversationVisible || (!hasTeams && !expanded)) return null
+  // A waiting proposal is content too, so the panel (and its collapsed badge)
+  // must survive a workspace with no teams yet — otherwise the one durable
+  // approval surface disappears exactly when an approval is what is pending.
+  if (!conversationVisible || (!hasTeams && pendingApprovalCount === 0 && !expanded)) return null
 
   return (
     <>
       {!expanded && (
-        <CollapsedBadge count={visibleCount} busy={busy} t={t} onClick={() => {
+        <CollapsedBadge count={visibleCount + pendingApprovalCount} busy={busy} t={t} onClick={() => {
           if (current === undefined) return
           setOpenOwner(current)
           setOpen(true)
@@ -1280,7 +1367,10 @@ export function ActivityPanel({ sessionsList, modelDirectories, openMember, t, c
             </span>
           </header>
           <div className={css.teams}>
-            {visibleCount === 0
+            {current !== undefined && (
+              <PendingApprovals sessionId={current} onRows={setPendingApprovalCount} t={t} />
+            )}
+            {visibleCount === 0 && pendingApprovalCount === 0
               ? <span className={css.emptyHint}>{t('activity.empty')}</span>
               : (
                 <>

@@ -4,6 +4,9 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply, inject } from '../src/client/index.ts'
 
+/** Conversation definitions the mounted client registered, in registration order. */
+const conversationRegistrations: { kind: string; target?: string; hasMatch: boolean; hasStart: boolean; hasBuildViewNode: boolean }[] = []
+
 function workspaceFeed() {
   return {
     getSnapshot: () => ({ items: [{ workspaceId: 'workspace:one' as never, title: 'One', path: '/one', sessionIds: [], createdAt: '', updatedAt: '' }], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null, baselinesReady: true, recentWorkspaceId: undefined }),
@@ -12,6 +15,7 @@ function workspaceFeed() {
 }
 
 async function bench(persisted: string | null = null) {
+  conversationRegistrations.length = 0
   vi.stubGlobal('localStorage', {
     getItem: () => persisted,
     setItem: vi.fn(),
@@ -52,7 +56,21 @@ async function bench(persisted: string | null = null) {
       resetConnected: () => {},
     }),
   } as never)
-  ctx.provide('uiConversation', { events: { register: vi.fn() } } as never)
+  ctx.provide('uiConversation', {
+    events: {
+      register: (definition: never) => {
+        const d = definition as unknown as { kind: string; target?: string; match?: unknown; start?: unknown; buildViewNode?: unknown }
+        conversationRegistrations.push({
+          kind: d.kind,
+          target: d.target,
+          hasMatch: typeof d.match === 'function',
+          hasStart: typeof d.start === 'function',
+          hasBuildViewNode: typeof d.buildViewNode === 'function',
+        })
+        return () => {}
+      },
+    },
+  } as never)
   ctx.provide('connection', { api: { llm: { models: vi.fn(async () => ({ result: { ok: true, value: { groups: [], failures: [] } } })) } } } as never)
   ctx.provide('workspaces', {
     list: workspaceFeed(),
@@ -86,6 +104,25 @@ async function bench(persisted: string | null = null) {
 }
 
 describe('Team Client slot takeover', () => {
+  it('registers both conversation card definitions on mount', async () => {
+    const { ctx } = await bench()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+
+    // The approval card and the team card are the plugin's two conversation
+    // contributions. A definition missing `target` or `buildViewNode` makes the
+    // host's `events.register` throw, and without `match` it never folds — so
+    // pin the whole shape, not just the kind.
+    expect(conversationRegistrations.map(entry => entry.kind).sort())
+      .toEqual(['agent-teams', 'sophia-approval'])
+    for (const entry of conversationRegistrations) {
+      expect(entry.target).toBe('chat')
+      expect(entry.hasMatch).toBe(true)
+      expect(entry.hasStart).toBe(true)
+      expect(entry.hasBuildViewNode).toBe(true)
+    }
+  })
+
   it('enters and leaves Team mode by shadowing and restoring the three primary seats', async () => {
     const { ctx, slots } = await bench()
     const fiber = ctx.plugin({ inject: [...inject], apply })

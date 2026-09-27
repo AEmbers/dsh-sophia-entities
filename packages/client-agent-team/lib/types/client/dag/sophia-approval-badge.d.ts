@@ -42,6 +42,15 @@ export interface SophiaApprovalAggregate {
 export declare function aggregateApprovalSnapshot(body: {
     readonly requests?: unknown;
 } | null | undefined): SophiaApprovalAggregate;
+/**
+ * Recover the rows that await the Human owner, in the order the host listed
+ * them. The badge only ever needed the count, but the activity panel renders
+ * one actionable row per waiting proposal — and it must read the same snapshot
+ * the badge polls rather than inventing a second source of truth.
+ */
+export declare function pendingApprovalRows(body: {
+    readonly requests?: unknown;
+} | null | undefined): readonly SophiaApprovalSnapshotRow[];
 /** Optional seams for pull an isolated vitest bench. */
 export interface ApprovalBadgeRuntime {
     fetchState?: (url: string, init?: RequestInit) => Promise<Response>;
@@ -59,5 +68,5 @@ export interface ApprovalBadgeController {
     stop: () => void;
     isCancelled: () => boolean;
 }
-export declare function startApprovalBadgePolling(subscriber: (aggregate: SophiaApprovalAggregate) => void, runtime?: ApprovalBadgeRuntime): ApprovalBadgeController;
+export declare function startApprovalBadgePolling(subscriber: (aggregate: SophiaApprovalAggregate) => void, runtime?: ApprovalBadgeRuntime, onRows?: (rows: readonly SophiaApprovalSnapshotRow[]) => void): ApprovalBadgeController;
 //# sourceMappingURL=sophia-approval-badge.d.ts.map

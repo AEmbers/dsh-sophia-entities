@@ -25,6 +25,8 @@ import { activityPanelExpandedForSession, activityPanelShouldAutoExpand, compact
 import { ACTIVITY_HALT_URL, getActivityMonitorTargetsSnapshot, getActivitySnapshotsSnapshot, startActivityPolling, subscribeActivityMonitorTargets, subscribeActivitySnapshots, } from "./activity-monitor.js";
 import { ACTION_ART, LEAD_ART, memberArtUrl } from "./artwork.js";
 import { OPEN_PANEL_EVENT } from "./AgentTeamsCard.js";
+import { startApprovalBadgePolling } from "./sophia-approval-badge.js";
+import { postApprovalPlanAction } from "./sophia-approval-requests.js";
 import { StagingPlanEditor } from "./StagingPlanEditor.js";
 import { DEFAULT_PANEL_LAYOUT, PANEL_LAYOUT_STORAGE_KEY, compactPanelForBounds, dockPanelLayout, floatPanelLayout, movePanelLayout, panelMaximumHeight, panelUsesAutoHeight, parsePanelLayout, resizePanelLayout, resolvePanelGeometry, } from "./panel-geometry.js";
 import css from './ActivityPanel.module.css';
@@ -107,6 +109,46 @@ function taskTone(state, status) {
     if (status === 'cancelled')
         return 'cancelled';
     return state;
+}
+/**
+ * Pending team proposals awaiting the Human owner, rendered INSIDE the activity
+ * panel.
+ *
+ * The in-conversation approval card only exists while its `sophia_team_propose`
+ * tool call is inside the loaded chat window (the host's assembler folds that
+ * window and nothing older), so a proposal filed earlier in a long session was
+ * unreachable: the badge counted it, but neither the card nor the panel showed
+ * it and the badge's click had nowhere to go. The panel is always mounted, so
+ * it reads the same host queue the badge polls and offers the owner controls
+ * here — one durable place to approve, independent of chat scrollback.
+ */
+function PendingApprovals({ sessionId, onRows, t }) {
+    const [rows, setRows] = useState([]);
+    const [busyId, setBusyId] = useState();
+    const [error, setError] = useState();
+    useEffect(() => {
+        const controller = startApprovalBadgePolling(() => { }, {}, (next) => {
+            setRows(next);
+            onRows?.(next.length);
+        });
+        return () => { controller.stop(); };
+    }, [onRows]);
+    const act = (requestId, decision) => {
+        setBusyId(requestId);
+        setError(undefined);
+        // The owner verdict is one action with the decision as its verb: approve
+        // carries its own `decision` field, reject is the bare verb.
+        const payload = decision === 'approve'
+            ? { action: 'approve', requestId, decision: 'approve' }
+            : { action: 'reject', requestId };
+        void postApprovalPlanAction(sessionId, payload)
+            .then(() => { setRows((current) => current.filter((row) => row.id !== requestId)); })
+            .catch((cause) => { setError(cause instanceof Error ? cause.message : String(cause)); })
+            .finally(() => { setBusyId(undefined); });
+    };
+    if (rows.length === 0)
+        return null;
+    return (_jsx("section", { className: css.approvals, "aria-label": t('approval.badge.title'), "data-pending-approvals": rows.length, children: rows.map((row) => (_jsxs("article", { className: css.approvalRow, "data-request-id": row.id, "data-mode": row.mode ?? 'unset', children: [_jsx("span", { className: css.approvalGoal, children: row.goal }), _jsx("span", { className: css.approvalMeta, children: t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`) }), error !== undefined && busyId === undefined && (_jsx("span", { className: css.approvalError, role: "alert", children: error })), _jsxs("span", { className: css.approvalActions, children: [_jsx("button", { type: "button", className: css.approvalApprove, disabled: busyId !== undefined, onClick: () => { act(row.id, 'approve'); }, children: t('approval.approve') }), _jsx("button", { type: "button", className: css.approvalReject, disabled: busyId !== undefined, onClick: () => { act(row.id, 'reject'); }, children: t('approval.reject') })] })] }, row.id))) }));
 }
 function Chevron({ open }) {
     return (_jsx("svg", { className: css.chevron, "data-open": open, width: "9", height: "9", viewBox: "0 0 10 10", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", "aria-hidden": true, children: _jsx("path", { d: "M3.5 2l3 3-3 3" }) }));
@@ -455,6 +497,9 @@ export function ActivityPanel({ sessionsList, modelDirectories, openMember, t, c
     const [wasActive, setWasActive] = useState(false);
     const [historic, setHistoric] = useState(new Map());
     const [layout, setLayout] = useState(initialPanelLayout);
+    // A waiting proposal alone is enough reason to keep the panel open and to
+    // suppress the "no teams" hint: the approvals block IS panel content.
+    const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
     const [bounds, setBounds] = useState(initialPanelBounds);
     const [interaction, setInteraction] = useState(null);
     const panelRef = useRef(null);
@@ -786,9 +831,12 @@ export function ActivityPanel({ sessionsList, modelDirectories, openMember, t, c
         maxHeight: panelMaximumHeight(geometry, bounds),
         transform: `translate3d(${geometry.x}px, ${geometry.y}px, 0)`,
     };
-    if (!conversationVisible || (!hasTeams && !expanded))
+    // A waiting proposal is content too, so the panel (and its collapsed badge)
+    // must survive a workspace with no teams yet — otherwise the one durable
+    // approval surface disappears exactly when an approval is what is pending.
+    if (!conversationVisible || (!hasTeams && pendingApprovalCount === 0 && !expanded))
         return null;
-    return (_jsxs(_Fragment, { children: [!expanded && (_jsx(CollapsedBadge, { count: visibleCount, busy: busy, t: t, onClick: () => {
+    return (_jsxs(_Fragment, { children: [!expanded && (_jsx(CollapsedBadge, { count: visibleCount + pendingApprovalCount, busy: busy, t: t, onClick: () => {
                     if (current === undefined)
                         return;
                     setOpenOwner(current);
@@ -796,12 +844,12 @@ export function ActivityPanel({ sessionsList, modelDirectories, openMember, t, c
                 } })), expanded && (_jsxs("aside", { ref: panelRef, className: css.panel, style: panelStyle, "data-agent-teams-activity": true, "data-panel-mode": geometry.mode, "data-height-mode": autoHeight ? 'auto' : 'manual', "data-compact": compact || undefined, "data-dragging": interaction === 'dragging' || undefined, "data-resizing": interaction === 'resizing' || undefined, "aria-label": t('activity.panelAria'), children: [_jsxs("header", { className: css.panelHead, onPointerDown: beginMove, onPointerMove: updateGesture, onPointerUp: endGesture, onPointerCancel: cancelGesture, "data-drag-handle": !compact || undefined, children: [_jsxs("span", { className: css.panelTitle, children: [t('activity.title'), _jsx("span", { className: css.panelDot, "data-busy": busy, "aria-hidden": true })] }), _jsxs("span", { className: css.panelControls, children: [!compact && (_jsx("button", { type: "button", className: css.iconButton, "data-control": "dock", "data-mode": geometry.mode, onClick: toggleDock, "aria-label": t(geometry.mode === 'docked' ? 'activity.float' : 'activity.dockRight'), title: t(geometry.mode === 'docked' ? 'activity.float' : 'activity.dockRight'), children: _jsx(IconPanelLeftOutline16, {}) })), _jsx("button", { type: "button", className: css.iconButton, "data-control": "collapse", onClick: () => {
                                             setOpen(false);
                                             setOpenOwner(undefined);
-                                        }, "aria-label": t('activity.collapse'), title: t('activity.collapse'), children: _jsx(IconChevronDownOutline14, {}) })] })] }), _jsx("div", { className: css.teams, children: visibleCount === 0
-                            ? _jsx("span", { className: css.emptyHint, children: t('activity.empty') })
-                            : (_jsxs(_Fragment, { children: [visibleTeams.map((team) => (_jsx(TeamSection, { team: team, modelDirectory: team.phase === 'staged'
-                                            ? modelDirectories.directoryFor(team.captainSessionId)
-                                            : undefined, onContinuePlanning: returnToComposer, onDiscarded: returnToComposer, onNavigate: navigateToSession, t: t }, team.teamId))), visibleArchived.map((team) => (_jsxs("div", { "data-team-id": team.teamId, "data-historic": true, className: css.archivedWrap, children: [_jsx("span", { className: css.archiveLabel, children: t(team.phase === 'staged' ? 'archive.discardedLabel' : 'archive.label') }), _jsx(TeamSection, { team: team, onNavigate: navigateToSession, t: t, historic: true })] }, `${team.captainSessionId}:${team.teamId}`))), visibleHistoric.map(({ data: team, owner }) => {
-                                        const teamKey = `${owner}:${team.teamId}`;
-                                        return (_jsx(TeamSection, { team: historicCardTeam(team, owner), onNavigate: navigateToSession, t: t, historic: true }, teamKey));
-                                    })] })) }), !compact && (_jsx("div", { className: css.resizeHandle, "data-resize-edge": "left", onPointerDown: (event) => { beginResize('left', event); }, onPointerMove: updateGesture, onPointerUp: endGesture, onPointerCancel: cancelGesture, "aria-hidden": true })), !compact && geometry.mode === 'floating' && (_jsxs(_Fragment, { children: [_jsx("div", { className: css.resizeHandle, "data-resize-edge": "bottom", onPointerDown: (event) => { beginResize('bottom', event); }, onPointerMove: updateGesture, onPointerUp: endGesture, onPointerCancel: cancelGesture, "aria-hidden": true }), _jsx("div", { className: css.resizeHandle, "data-resize-edge": "corner", onPointerDown: (event) => { beginResize('corner', event); }, onPointerMove: updateGesture, onPointerUp: endGesture, onPointerCancel: cancelGesture, "aria-hidden": true })] }))] }))] }));
+                                        }, "aria-label": t('activity.collapse'), title: t('activity.collapse'), children: _jsx(IconChevronDownOutline14, {}) })] })] }), _jsxs("div", { className: css.teams, children: [current !== undefined && (_jsx(PendingApprovals, { sessionId: current, onRows: setPendingApprovalCount, t: t })), visibleCount === 0 && pendingApprovalCount === 0
+                                ? _jsx("span", { className: css.emptyHint, children: t('activity.empty') })
+                                : (_jsxs(_Fragment, { children: [visibleTeams.map((team) => (_jsx(TeamSection, { team: team, modelDirectory: team.phase === 'staged'
+                                                ? modelDirectories.directoryFor(team.captainSessionId)
+                                                : undefined, onContinuePlanning: returnToComposer, onDiscarded: returnToComposer, onNavigate: navigateToSession, t: t }, team.teamId))), visibleArchived.map((team) => (_jsxs("div", { "data-team-id": team.teamId, "data-historic": true, className: css.archivedWrap, children: [_jsx("span", { className: css.archiveLabel, children: t(team.phase === 'staged' ? 'archive.discardedLabel' : 'archive.label') }), _jsx(TeamSection, { team: team, onNavigate: navigateToSession, t: t, historic: true })] }, `${team.captainSessionId}:${team.teamId}`))), visibleHistoric.map(({ data: team, owner }) => {
+                                            const teamKey = `${owner}:${team.teamId}`;
+                                            return (_jsx(TeamSection, { team: historicCardTeam(team, owner), onNavigate: navigateToSession, t: t, historic: true }, teamKey));
+                                        })] }))] }), !compact && (_jsx("div", { className: css.resizeHandle, "data-resize-edge": "left", onPointerDown: (event) => { beginResize('left', event); }, onPointerMove: updateGesture, onPointerUp: endGesture, onPointerCancel: cancelGesture, "aria-hidden": true })), !compact && geometry.mode === 'floating' && (_jsxs(_Fragment, { children: [_jsx("div", { className: css.resizeHandle, "data-resize-edge": "bottom", onPointerDown: (event) => { beginResize('bottom', event); }, onPointerMove: updateGesture, onPointerUp: endGesture, onPointerCancel: cancelGesture, "aria-hidden": true }), _jsx("div", { className: css.resizeHandle, "data-resize-edge": "corner", onPointerDown: (event) => { beginResize('corner', event); }, onPointerMove: updateGesture, onPointerUp: endGesture, onPointerCancel: cancelGesture, "aria-hidden": true })] }))] }))] }));
 }
