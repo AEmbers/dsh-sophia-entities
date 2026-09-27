@@ -1,5 +1,5 @@
 export const zh = {
-    team: '团队',
+    team: '钦天监',
     backToConversations: '对话',
     workspaces: '工作区',
     workspaceSelectorWithValue: '工作区，{title}',

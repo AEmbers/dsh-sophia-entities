@@ -112,7 +112,7 @@ describe('Team agent surfaces', () => {
     // The conversation seat carries the shipped ConversationRoot; its
     // resident [data-composer-seat] node stands in for the old baseline text.
     expect(b.view.container.querySelector('[data-composer-seat]')).toBeTruthy()
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await waitFor(() => expect(document.documentElement.dataset.agentTeamMode).toBe('team'))
     expect(mainViewSessionId(b)).toBe('ordinary-session')
     expect(await b.view.findByRole('heading', { name: '频道' })).toBeTruthy()
@@ -150,7 +150,7 @@ describe('Team agent surfaces', () => {
 
   it('loads Workspace Agents and creates a durable Member without optimistic rows', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     expect(await b.view.findByText('从左侧选择一个频道开始协作')).toBeTruthy()
 
     expect(await b.view.findByText('builder')).toBeTruthy()
@@ -192,7 +192,7 @@ describe('Team agent surfaces', () => {
 
   it('creates an Agent with empty description, no Channels, and an optional model', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await b.view.findByText('builder')
     fireEvent.click(b.view.getByRole('button', { name: '添加 Agent' }))
     fireEvent.change(b.view.getByLabelText('名称'), { target: { value: 'bare' } })
@@ -216,7 +216,7 @@ describe('Team agent surfaces', () => {
 
   it('creates a Channel atomically with selected available Members and manages committed membership', async () => {
     const b = await runtimeWithTeam()
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     expect(await b.view.findByText('还没有频道')).toBeTruthy()
     fireEvent.click(b.view.getByRole('button', { name: '新建频道' }))
     fireEvent.change(b.view.getByLabelText('名称'), { target: { value: 'backend' } })
@@ -246,7 +246,7 @@ describe('Team agent surfaces', () => {
 
   it('edits Channel membership from the sidebar row menu with idempotent retries', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     expect(await b.view.findByText('# engineering')).toBeTruthy()
 
     fireEvent.click(b.view.getByRole('button', { name: 'engineering 的操作' }))
@@ -276,7 +276,7 @@ describe('Team agent surfaces', () => {
 
   it('renames Channel display facts from the editor and refreshes the row', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     expect(await b.view.findByText('# engineering')).toBeTruthy()
 
     fireEvent.click(b.view.getByRole('button', { name: 'engineering 的操作' }))
@@ -299,7 +299,7 @@ describe('Team agent surfaces', () => {
 
   it('offers 恢复 and 重启 in the row menu only where they apply and routes both through the Host remote', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await b.view.findByText('builder')
 
     // A healthy Member's menu carries only the editor entry.
@@ -333,7 +333,7 @@ describe('Team agent surfaces', () => {
 
   it('retires the manual clear-context action and follows a Member rollover exactly once', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await b.view.findByText('builder')
 
     // The manual clear-context row action is retired: Members manage their
@@ -405,7 +405,7 @@ describe('Team agent surfaces', () => {
 
   it('edits Agent identity and pins a Member model through the editor', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await b.view.findByText('builder')
 
     fireEvent.click(b.view.getByRole('button', { name: 'builder 的操作' }))
@@ -560,7 +560,7 @@ describe('Team agent surfaces', () => {
 
   it('edits Agent facts without a Channel membership section', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await b.view.findByText('builder')
 
     fireEvent.click(b.view.getByRole('button', { name: 'builder 的操作' }))
@@ -586,7 +586,7 @@ describe('Team agent surfaces', () => {
 describe('Team archival surfaces', () => {
   it('archives an Agent from the row menu behind a destructive confirm', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await b.view.findByText('builder')
 
     // The danger entry sits in every Member's row menu.
@@ -650,7 +650,7 @@ describe('Team archival surfaces', () => {
 
   it('archives a Channel from the row menu behind a destructive confirm', async () => {
     const b = await runtimeWithTeam({ initialChannels: true })
-    fireEvent.click(b.view.getByRole('button', { name: '团队' }))
+    fireEvent.click(b.view.getByRole('button', { name: /团队|钦天监/ }))
     await b.view.findByText('# engineering')
 
     fireEvent.click(b.view.getByRole('button', { name: 'engineering 的操作' }))

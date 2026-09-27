@@ -14411,7 +14411,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		//#endregion
 		//#region src/client/locales.ts
 		const zh$1 = {
-			team: "团队",
+			team: "钦天监",
 			backToConversations: "对话",
 			workspaces: "工作区",
 			workspaceSelectorWithValue: "工作区，{title}",
