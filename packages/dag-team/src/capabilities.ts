@@ -6,10 +6,39 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { readTeamSync, readRetiredMemberIdsSync } from './state.ts'
 import type { TeamState } from './types.ts'
-import { MEMBER_TOOL_NAMES, TEAM_TOOL_NAMES } from './tool-names.ts'
+import { MEMBER_DENIED_TOOL_NAMES } from './tool-names.ts'
 
 export const TEAM_ACTIVATION_PROMPT = 'AgentTeams (Agent Teams) provides multi-agent team collaboration. Apply these rules when the user requests it (including /agent-teams) or when continuing an existing team. Mentioning, quoting, discussing, or declining AgentTeams alone is not a request to start work.'
-export const TEAM_MEMBER_PROMPT = 'You are an AgentTeams member. Follow your assigned member persona and task contract. Use agent_teams_claim_task, agent_teams_update_task, agent_teams_send_message and agent_teams_status for your own work. Include the current attempt_id in updates; report completion or failure to the captain. Do not create, approve, edit or resume a team. If your durable membership is unavailable, report that to the parent instead of creating a replacement.'
+export const TEAM_MEMBER_PROMPT = 'You are an AgentTeams member. Follow your assigned member persona and task contract. Use agent_teams_claim_task, agent_teams_update_task, agent_teams_send_message and agent_teams_status for your own work. Include the current attempt_id in updates; report completion or failure to the captain. Do not approve, edit or resume a team. If your durable membership is unavailable, report that to the parent instead of creating a replacement.'
+
+/**
+ * What a standing member is told to do with work that arrives by `@`.
+ *
+ * This is the behaviour the owner designed the organisation around: twenty
+ * posts sit in one Channel and stay asleep; a post that is mentioned wakes,
+ * and rather than doing the work inline he opens a SMALL team sized to that
+ * job and hands it out. Two mentions therefore become two independent teams
+ * that cannot block each other, which is the whole point — one post doing its
+ * work serially would queue every later request behind the first.
+ *
+ * The depth of what he may open is bounded by `memberMaxDepth`, not by this
+ * text: `installMemberDelegationGuard` refuses the spawn above it, so the
+ * budget stays a runtime fact rather than a promise the model can ignore.
+ */
+export const TEAM_MEMBER_DISPATCH_RULE = `收到 @ 到你的活时：不要自己闷头做完，而是为这个活临时开一个小团队（用 agent_teams_create，成员数按任务难度定，简单的两三个、复杂的多几个），把活派给他们，然后汇总结果回报给派活给你的人。中途再收到另一个不相关的活，就再开一个独立团队，两个团队互不影响，不要排队。团队跑完就结束掉。`
+
+/**
+ * The naming rule a member applies when he staffs his own temporary team.
+ *
+ * Shares `TEAM_POST_ROSTER` with the captain's rule so a member-opened team
+ * draws the same portraits: the client matches artwork by name, so a member
+ * who invented his own names would staff a team of bare initials.
+ * @param roster - the twenty posts (`TEAM_POST_ROSTER`); passed in because the
+ * constant is declared below this doc comment.
+ */
+export function memberNamingRule(roster: readonly string[]): string {
+  return `给你的临时团队成员命名时，同样只用这二十个岗位名（写在 member.name），头像才会正确匹配：${roster.join('、')}。`
+}
 
 /**
  * The twenty posts a member name or role is drawn from, paired with the OC
@@ -149,9 +178,7 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
     states.set(agent, state)
     active.add(state)
     try {
-      if (member) revoke = agent.ctx.tools.restrict({
-        deny: TEAM_TOOL_NAMES.filter(name => !MEMBER_TOOL_NAMES.includes(name)),
-      })
+      if (member) revoke = agent.ctx.tools.restrict({ deny: MEMBER_DENIED_TOOL_NAMES })
     } catch (error) {
       // A live scope must accept the member restriction; anything else is a
       // real wiring fault and must stay loud.
@@ -177,7 +204,13 @@ export function installTeamCapabilities(ctx: Context, config: CapabilityConfig):
   ctx.systemPrompt.section({
     name: 'agent-teams:usage', order: config.order ?? 117,
     text: ({ agent }) => {
-      return agent !== undefined && states.get(agent)?.member ? TEAM_MEMBER_PROMPT : captainPrompt
+      // A member gets his own contract, not a captain prompt with the create
+      // tool politely withheld: members are allowed to open the small team
+      // that does their assigned work, so the rules he needs are about
+      // dispatching and reporting, not about abstaining.
+      return agent !== undefined && states.get(agent)?.member
+        ? `${TEAM_MEMBER_PROMPT}\n\n${TEAM_MEMBER_DISPATCH_RULE}\n\n${memberNamingRule(TEAM_POST_ROSTER)}`
+        : captainPrompt
     },
   })
   onAgentReady(ctx, agent => { attach(agent) })

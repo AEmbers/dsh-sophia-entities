@@ -82,7 +82,7 @@ export const Config = z.object({
             dependencies: z.array(z.string()),
         })),
     })).default({}),
-    memberMaxDepth: z.natural().default(0),
+    memberMaxDepth: z.natural().default(1),
     maxMembers: z.natural().min(1).default(8),
     /**
      * How many members the owner wants the standing organisation to hold.
@@ -121,7 +121,7 @@ export function apply(ctx, config) {
         memberModel: config.memberModel,
         executionPrompt: config.executionPrompt,
         fallback: config.fallback,
-        memberMaxDepth: config.memberMaxDepth ?? 0,
+        memberMaxDepth: config.memberMaxDepth ?? 1,
         maxMembers: config.maxMembers ?? 8,
         teamSize: config.teamSize ?? config.maxMembers ?? 8,
         profiles: config.profiles ?? {},

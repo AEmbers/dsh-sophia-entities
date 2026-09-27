@@ -71,7 +71,15 @@ export interface Config {
   executionPrompt?: string
   /** Plugin-wide fallback route for unavailable member models. */
   fallback?: import('./profiles.ts').TeamModelFallbackConfig
-  /** Member delegation depth cap (default `0`; `0` forbids delegation entirely). */
+  /**
+   * Member delegation depth cap (default `1`).
+   *
+   * `0` forbids a member from opening anything of his own, which makes the
+   * standing organisation a set of leaf workers; `1` lets a member open the one
+   * small team that does the work he was mentioned into — and stops there, so
+   * no chain can deepen. The depth counts the member himself as 1, so a member
+   * opening his own team needs at least `1`.
+   */
   memberMaxDepth?: number
   /** Team size cap in members (default `8`). */
   maxMembers?: number
@@ -142,7 +150,7 @@ export const Config: z<Config> = z.object({
       dependencies: z.array(z.string()),
     })),
   })).default({}),
-  memberMaxDepth: z.natural().default(0),
+  memberMaxDepth: z.natural().default(1),
   maxMembers: z.natural().min(1).default(8),
   /**
    * How many members the owner wants the standing organisation to hold.
@@ -183,7 +191,7 @@ export function apply(ctx: Context, config: Config): void {
     memberModel: config.memberModel,
     executionPrompt: config.executionPrompt,
     fallback: config.fallback,
-    memberMaxDepth: config.memberMaxDepth ?? 0,
+    memberMaxDepth: config.memberMaxDepth ?? 1,
     maxMembers: config.maxMembers ?? 8,
     teamSize: config.teamSize ?? config.maxMembers ?? 8,
     profiles: config.profiles ?? {},
