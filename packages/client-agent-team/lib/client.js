@@ -18720,8 +18720,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			const snapshots = (0, react.useSyncExternalStore)(subscribeActivitySnapshots, getActivitySnapshotsSnapshot);
 			const local = (0, react.useSyncExternalStore)(state.subscribe, state.getSnapshot);
 			const [retry, setRetry] = (0, react.useState)(0);
-			const live = snapshots.teams.filter((team) => team.captainSessionId === sessionId);
-			const archived = snapshots.archivedTeams.filter((team) => team.captainSessionId === sessionId && !live.some((item) => item.teamId === team.teamId));
+			const mine = (team) => team.mode === "persistent" || team.captainSessionId === sessionId;
+			const live = snapshots.teams.filter(mine);
+			const archived = snapshots.archivedTeams.filter((team) => mine(team) && !live.some((item) => item.teamId === team.teamId));
 			const historic = [...local.history.values()].filter((team) => team.captainSessionId === sessionId && !live.some((item) => item.teamId === team.teamId) && !archived.some((item) => item.teamId === team.teamId)).map((team) => historicCardTeam(team, sessionId));
 			const records = [
 				...live,
