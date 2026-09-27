@@ -8,6 +8,10 @@
   font-family: inherit;
 }
 .content { max-width: 1400px; margin: 0 auto; padding: 12px 20px 28px; }
+/* Waiting proposals lead the pane: the owner opened this tab to act, and the
+ * in-chat card is not reachable once its tool call leaves the loaded window. */
+.approvalsHost { max-width: 1400px; margin: 0 auto; padding: 0 20px; }
+.approvalsHost:empty { display: none; }
 .selector { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
 .selector button { display: flex; gap: 12px; align-items: center; max-width: 100%; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 8px 10px; text-align: left; overflow-wrap: anywhere; }
 .selector span { font-size: 10px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }

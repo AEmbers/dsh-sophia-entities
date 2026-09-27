@@ -24,6 +24,25 @@ import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/c
 import { type ActivityTeam } from './activity-monitor.ts';
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts';
 import type { AgentTeamsTranslate } from './locales.ts';
+/**
+ * Pending team proposals awaiting the Human owner, rendered INSIDE the activity
+ * panel.
+ *
+ * The in-conversation approval card only exists while its `sophia_team_propose`
+ * tool call is inside the loaded chat window (the host's assembler folds that
+ * window and nothing older), so a proposal filed earlier in a long session was
+ * unreachable: the badge counted it, but neither the card nor the panel showed
+ * it and the badge's click had nowhere to go. The panel is always mounted, so
+ * it reads the same host queue the badge polls and offers the owner controls
+ * here — one durable place to approve, independent of chat scrollback.
+ */
+export declare function PendingApprovals({ sessionId, onRows, placement, t }: {
+    readonly sessionId: string;
+    readonly onRows?: (count: number) => void;
+    /** `panel` sits inside the floater; `surface` leads the right-pane monitor. */
+    readonly placement?: 'panel' | 'surface';
+    readonly t: AgentTeamsTranslate;
+}): import("react").JSX.Element | null;
 export declare function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscarded, onNavigate, t, historic, workspace }: {
     readonly team: ActivityTeam;
     readonly modelDirectory?: ModelDirectory;

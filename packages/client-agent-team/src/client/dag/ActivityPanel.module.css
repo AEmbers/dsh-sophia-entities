@@ -1340,6 +1340,11 @@
   margin: 0 10px 10px;
 }
 
+/* The right-pane placement owns its own spacing (see WorkspaceActivity). */
+.approvalsSurface {
+  margin: 0 0 16px;
+}
+
 .approvalRow {
   display: flex;
   flex-direction: column;
