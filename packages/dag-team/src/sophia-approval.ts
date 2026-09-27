@@ -596,6 +596,23 @@ function createLazyPersistentBackend(
         ? Promise.resolve(Object.freeze([]))
         : inner.membersOf(facadeCtx, teamRef)
     },
+    // Roster growth and release. Forwarded the same way as `membersOf`: the
+    // facade already rejects a backend that omits them, so these only need to
+    // pass the call through (and must NOT invent a backend that cannot do it).
+    addMember: (facadeCtx, teamRef, member) => {
+      const inner = resolveBackend()
+      if (inner.addMember === undefined) {
+        throw new Error('the persistent backend cannot add members on this host build')
+      }
+      return inner.addMember(facadeCtx, teamRef, member)
+    },
+    removeMember: (facadeCtx, teamRef, memberName) => {
+      const inner = resolveBackend()
+      if (inner.removeMember === undefined) {
+        throw new Error('the persistent backend cannot remove members on this host build')
+      }
+      return inner.removeMember(facadeCtx, teamRef, memberName)
+    },
   }
 }
 

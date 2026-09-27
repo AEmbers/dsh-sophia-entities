@@ -181,5 +181,104 @@ export function createSophiaPersistentBackend(deps) {
             }));
             return Object.freeze(rows);
         },
+        /**
+         * Staff one more member into an existing Channel.
+         *
+         * The plan rosters a team once, so a team that came up short (the host
+         * refused a name, someone was retired again) had no way to be completed —
+         * and rebuilding it is impossible, because the first attempt already holds
+         * every handle it created. This closes that gap.
+         *
+         * The member is attached to the team's own Channel, so `membersOf` and the
+         * activity panel see the new row immediately and the planned `role` text
+         * still selects the OC portrait.
+         */
+        async addMember(_ctx, teamRef, member) {
+            const slash = teamRef.lastIndexOf('/');
+            const resolvedWorkspace = slash === -1 ? workspaceId : teamRef.slice(0, slash);
+            const channelRef = (slash === -1 ? teamRef : teamRef.slice(slash + 1));
+            const model = member.provider === undefined || member.model === undefined ? undefined
+                : Object.freeze({
+                    provider: member.provider,
+                    model: member.model,
+                    ...(member.reasoningEffort === undefined ? {} : { reasoningEffort: member.reasoningEffort }),
+                });
+            // A unique stamp per call: re-adding the same name after a removal is a
+            // legitimate second attempt, so the id must not be derived from the name
+            // alone or the ledger would treat it as a duplicate request.
+            const stamp = `${channelRef}:${member.name}:${Date.now().toString(36)}`;
+            let result;
+            try {
+                result = await deps.host.addMember({
+                    requestId: requestId(`persistent:add:${stamp}`),
+                    workspaceId: resolvedWorkspace,
+                    handle: member.name,
+                    description: member.role ?? '',
+                    presetId: 'team-member',
+                    ...(model === undefined ? {} : { model }),
+                    channelRefs: Object.freeze([channelRef]),
+                });
+            }
+            catch (error) {
+                // One added member is never a roster-cap overflow, but the host's cap is
+                // a constructor value we cannot read, so surface the same actionable
+                // message when the cap is what refused it.
+                throw memberLimitError(error, 1, 0, member.name);
+            }
+            const stored = result.status.member;
+            return Object.freeze({
+                id: stored.memberId,
+                name: stored.handle,
+                role: stored.description,
+                state: stored.state,
+                ...(stored.model === undefined ? {} : { model: stored.model.model }),
+            });
+        },
+        /**
+         * Retire one member by HANDLE, so its name can be used again.
+         *
+         * Callers speak in handles (that is what the owner sees and what the plan
+         * wrote), while the host removes by `memberId`, so the name is resolved
+         * through the same roster read `membersOf` uses. Refusing on an unknown or
+         * ambiguous name is deliberate: silently removing the wrong member would be
+         * far worse than an error the caller can act on.
+         *
+         * A removal that leaves the member in other Channels is not possible here —
+         * the host removes the member from the ledger entirely.
+         */
+        async removeMember(_ctx, teamRef, memberName) {
+            if (deps.host.members === undefined || deps.host.removeMember === undefined) {
+                throw new Error('这个宿主版本没有暴露移除成员的能力（AgentTeam.removeMember 未接线），'
+                    + '所以无法释放「' + memberName + '」这个名字。');
+            }
+            const slash = teamRef.lastIndexOf('/');
+            const resolvedWorkspace = slash === -1 ? workspaceId : teamRef.slice(0, slash);
+            const channelRef = (slash === -1 ? teamRef : teamRef.slice(slash + 1));
+            const view = deps.host.view({ workspaceId: resolvedWorkspace });
+            const inChannel = new Set(view.members
+                .filter(membership => membership.channelRef === channelRef)
+                .map(membership => membership.memberId));
+            const matched = deps.host.members()
+                .filter(status => inChannel.has(status.member.memberId) && status.member.handle === memberName);
+            if (matched.length === 0) {
+                throw new Error(`队伍里没有叫「${memberName}」的成员，无法移除。`);
+            }
+            if (matched.length > 1) {
+                throw new Error(`队伍里有 ${matched.length} 个叫「${memberName}」的成员，名字不唯一，无法确定移除哪一个。`);
+            }
+            const target = matched[0].member;
+            const result = await deps.host.removeMember({
+                requestId: requestId(`persistent:remove:${target.memberId}:${Date.now().toString(36)}`),
+                memberId: target.memberId,
+            });
+            const removed = result.member;
+            return Object.freeze({
+                id: removed.memberId,
+                name: removed.handle,
+                role: removed.description,
+                state: removed.state,
+                ...(removed.model === undefined ? {} : { model: removed.model.model }),
+            });
+        },
     });
 }

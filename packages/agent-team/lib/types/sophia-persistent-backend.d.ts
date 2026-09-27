@@ -28,7 +28,7 @@
  *   request id, so un-awaited retries resolve idempotently inside the ledger.
  */
 import type { AgentTeamAgentMemberStatus } from './types/entities.ts';
-import type { AgentTeamAddMemberRequest, AgentTeamAddMemberResult, AgentTeamCreateChannelRequest, AgentTeamCreateChannelResult, AgentTeamSendMessageRequest, AgentTeamSendMessageResult, AgentTeamView, AgentTeamViewRequest } from './types/requests-results.ts';
+import type { AgentTeamAddMemberRequest, AgentTeamAddMemberResult, AgentTeamCreateChannelRequest, AgentTeamCreateChannelResult, AgentTeamSendMessageRequest, AgentTeamSendMessageResult, AgentTeamRemoveMemberRequest, AgentTeamRemoveMemberResult, AgentTeamView, AgentTeamViewRequest } from './types/requests-results.ts';
 import type { TeamBackend } from 'dsh-sophia-entities/orchestration';
 /**
  * Structural narrow pick of the `AgentTeam` host's public surface, so the
@@ -57,6 +57,22 @@ export interface PersistentHostAPI {
      * artwork against — can only come from here.
      */
     readonly members?: () => readonly AgentTeamAgentMemberStatus[];
+    /**
+     * Irreversibly remove one Member, so its handle becomes available again.
+     *
+     * WHY THE PLUGIN NEEDS THIS: handle uniqueness is enforced against every
+     * member that is not `inactive` AND still participates in the workspace, so
+     * archiving a member (`state: 'archived'`) does NOT free its name. A team that
+     * came up short therefore poisons every handle it managed to create, and no
+     * later attempt can reuse those posts — only a real removal clears the name.
+     *
+     * The host wires this from `AgentTeam.removeMember`; unlike `archiveMember`
+     * that method carries no `@Remote` decorator (it is intentionally kept off the
+     * client surface), so the plugin calls it server-side through the live service
+     * instance. Optional so a host build without it still runs: the backend then
+     * reports that removal is unavailable instead of pretending to free the name.
+     */
+    readonly removeMember?: (request: AgentTeamRemoveMemberRequest) => Promise<AgentTeamRemoveMemberResult>;
 }
 export interface SophiaPersistentBackendDeps {
     /** The live `AgentTeam` host instance, narrowed to the backend's structural needs. */
