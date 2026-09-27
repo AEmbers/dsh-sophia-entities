@@ -272,7 +272,7 @@ it('drives the complete opt-in Agent Team journey in real Web', async () => {
   await expect.poll(() => ordinaryComposer.count()).toBe(1)
 
   expect(scaffold.ctx.clientModules.graph().entries.some(entry => entry.id === 'dsh-sophia-entities')).toBe(true)
-  const teamTrigger = page.getByRole('button', { name: '团队' })
+  const teamTrigger = page.getByRole('button', { name: /团队|钦天监/ })
   const settingsTrigger = page.getByRole('button', { name: '设置' })
   const [teamBox, settingsBox] = await Promise.all([teamTrigger.boundingBox(), settingsTrigger.boundingBox()])
   expect(teamBox).not.toBeNull()
@@ -1451,7 +1451,7 @@ it('drives the complete opt-in Agent Team journey in real Web', async () => {
   // Channel leaves the sidebar; the archived Member leaves the agents panel,
   // and the Host side disposes its session and archives it from grouping
   // surfaces while the private memory stays on disk.
-  await page.getByRole('button', { name: '团队' }).click()
+  await page.getByRole('button', { name: /团队|钦天监/ }).click()
   // Restoration returns to the last open surface; the sidebar row is the
   // stable entry back onto the Channel page regardless of the restored route.
   await page.getByRole('button', { name: '# delivery' }).waitFor({ timeout: 20_000 })
@@ -1504,10 +1504,10 @@ it('drives the complete opt-in Agent Team journey in real Web', async () => {
   await expect.poll(() => globalPanelsNav.count()).toBe(1)
   await expect.poll(() => globalPanelsNav.isVisible()).toBe(true)
 
-  const enterTeamKeyboard = page.getByRole('button', { name: '团队' })
+  const enterTeamKeyboard = page.getByRole('button', { name: /团队|钦天监/ })
   await enterTeamKeyboard.focus()
   await expect.poll(() => enterTeamKeyboard.evaluate(element => element === document.activeElement)).toBe(true)
-  await expect.poll(() => page.getByRole('button', { name: '团队' }).getAttribute('data-team-action')).toBe('enter')
+  await expect.poll(() => page.getByRole('button', { name: /团队|钦天监/ }).getAttribute('data-team-action')).toBe('enter')
   await enterTeamKeyboard.press('Enter')
   await expect.poll(() => page.getByRole('button', { name: '成员', exact: true }).count()).toBe(1)
   await page.getByRole('heading', { name: '# delivery' }).waitFor()
@@ -2127,7 +2127,7 @@ it('drives the complete opt-in Agent Team journey in real Web', async () => {
   // Rail Panels only re-subscribe when they remount, so leaving Team mode and
   // returning is what makes the sideways surfaces report the same drop.
   await page.getByRole('button', { name: '对话' }).click()
-  await page.getByRole('button', { name: '团队' }).click()
+  await page.getByRole('button', { name: /团队|钦天监/ }).click()
   const railAlert = page.locator('section[aria-label="工作区"] [role="alert"]')
   await railAlert.first().waitFor({ timeout: 30_000 })
   const railBox = await railAlert.first().evaluate(element => {
@@ -2304,7 +2304,7 @@ it('keeps four same-origin Team pages responsive and independently subscribed', 
     const page = await context.newPage()
     pages.push(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'domcontentloaded' })
-    if (index === 0) await page.getByRole('button', { name: '团队', exact: true }).click()
+    if (index === 0) await page.getByRole('button', { name: /团队|钦天监/ }).click()
     await page.getByRole('button', { name: '# multi-web', exact: true }).click()
     await page.getByRole('heading', { name: '# multi-web', exact: true }).waitFor()
     await probe(page)
@@ -2320,7 +2320,7 @@ it('keeps four same-origin Team pages responsive and independently subscribed', 
   const separate = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'zh-CN' })
   const other = await separate.newPage()
   await other.goto(scaffold.authenticatedUrl)
-  await other.getByRole('button', { name: '团队', exact: true }).click()
+  await other.getByRole('button', { name: /团队|钦天监/ }).click()
   await other.getByRole('button', { name: '# multi-web', exact: true }).click()
   await other.locator('[data-team-channel] textarea').fill('来自独立浏览器的消息')
   await other.getByRole('button', { name: '发送', exact: true }).click()
@@ -2349,7 +2349,7 @@ it('opens a taskless thread from its ref chip in real Web', async () => {
   const consoleWatch = watchConsole(page)
   await page.goto(scaffold.authenticatedUrl)
   await connectFreshWorkspaceZh(page, scaffold.workspaceCwd, 'team-workspace')
-  await page.getByRole('button', { name: '团队', exact: true }).click()
+  await page.getByRole('button', { name: /团队|钦天监/ }).click()
   await page.getByRole('button', { name: '新建频道' }).click()
   const channelDialog = page.getByRole('dialog', { name: '新建频道' })
   await channelDialog.getByLabel('名称').fill('ref-repro')
@@ -2497,7 +2497,7 @@ it('configures the Human profile from Settings in real Web', async () => {
   await panel.getByRole('button', { name: '关闭' }).click()
 
   // The rename is not page-local: the Team timeline names the Human by it.
-  await page.getByRole('button', { name: '团队', exact: true }).click()
+  await page.getByRole('button', { name: /团队|钦天监/ }).click()
   await page.getByRole('button', { name: '新建频道' }).click()
   const channelDialog = page.getByRole('dialog', { name: '新建频道' })
   await channelDialog.getByLabel('名称').fill('profile-check')

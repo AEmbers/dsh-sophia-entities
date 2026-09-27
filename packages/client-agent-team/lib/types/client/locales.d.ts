@@ -1,5 +1,5 @@
 export declare const zh: {
-    readonly team: "团队";
+    readonly team: "钦天监";
     readonly backToConversations: "对话";
     readonly workspaces: "工作区";
     readonly workspaceSelectorWithValue: "工作区，{title}";
