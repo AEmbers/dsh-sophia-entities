@@ -253,18 +253,22 @@ export function createSophiaPersistentBackend(deps) {
             }
             const slash = teamRef.lastIndexOf('/');
             const resolvedWorkspace = slash === -1 ? workspaceId : teamRef.slice(0, slash);
-            const channelRef = (slash === -1 ? teamRef : teamRef.slice(slash + 1));
-            const view = deps.host.view({ workspaceId: resolvedWorkspace });
-            const inChannel = new Set(view.members
-                .filter(membership => membership.channelRef === channelRef)
-                .map(membership => membership.memberId));
+            // WHY THE SEARCH IS WORKSPACE-WIDE AND NOT CHANNEL-SCOPED: the members
+            // that most need releasing are exactly the ones that are in NO channel —
+            // a member added by a failed attempt, then archived when the attempt was
+            // abandoned, keeps holding its handle while belonging to nothing. Scoping
+            // the lookup to the team's own channel made those members unreachable and
+            // the tool answered "队伍里没有叫 X 的成员" for a name that was, in fact,
+            // occupied. The ledger's uniqueness rule is workspace-wide, so the lookup
+            // must be too.
             const matched = deps.host.members()
-                .filter(status => inChannel.has(status.member.memberId) && status.member.handle === memberName);
+                .filter(status => status.member.workspaceId === resolvedWorkspace && status.member.handle === memberName);
             if (matched.length === 0) {
-                throw new Error(`队伍里没有叫「${memberName}」的成员，无法移除。`);
+                throw new Error(`这个 workspace 里没有叫「${memberName}」的成员，无法移除。`
+                    + '如果这个名字现在能用，说明它已经被释放了。');
             }
             if (matched.length > 1) {
-                throw new Error(`队伍里有 ${matched.length} 个叫「${memberName}」的成员，名字不唯一，无法确定移除哪一个。`);
+                throw new Error(`这个 workspace 里有 ${matched.length} 个叫「${memberName}」的成员，名字不唯一，无法确定移除哪一个。`);
             }
             const target = matched[0].member;
             const result = await deps.host.removeMember({
