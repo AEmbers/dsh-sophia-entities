@@ -20155,7 +20155,18 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		};
 		//#endregion
 		//#region src/client/dag/index.tsx
-		/** Required services: conversation nodes, slots, sessions navigation, and locale. */
+		/**
+		* Required services: conversation nodes, slots, sessions navigation, and locale.
+		*
+		* `sidebarRight` / `sidebarRightTabs` are deliberately NOT listed here. They are
+		* optional right-pane hosts: a host (or a test composition) without them must
+		* still get the approval badge and the two conversation cards. Declaring them
+		* made the whole module suspend — `mount would suspend: missing service(s)
+		* sidebarRight, sidebarRightTabs — provide() them first` — and took the badge
+		* and both cards down with it. The right-pane contributions are registered
+		* through the scoped `ctx.inject` below instead, so their absence removes only
+		* the panel and its tab.
+		*/
 		const inject$1 = [
 			"uiConversation",
 			"slots",
@@ -20269,7 +20280,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 				id: "sophia-approval-badge",
 				order: 150,
 				locale: AGENT_TEAMS_LOCALE_NAMESPACE,
-				inject: () => ({})
+				inject: () => ({ onOpenApprovals: () => {
+					window.dispatchEvent(new CustomEvent(OPEN_PANEL_EVENT, { detail: {} }));
+				} })
 			}, SophiaApprovalBadge));
 		}
 		//#endregion
