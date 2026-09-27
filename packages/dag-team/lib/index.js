@@ -29,6 +29,7 @@ import { collectArchivedTeamsActivity, collectTeamsActivity, persistentTeamSnaps
 import { findTeamByCaptain } from "./state.js";
 import { formatProfilesForPrompt } from "./profiles.js";
 import { installTeamCapabilities } from "./capabilities.js";
+import { ORG_TREE_TEXT } from "./org-tree.js";
 import { TEAM_TOOL_NAMES } from "./tool-names.js";
 import { installSophiaApprovalPlane, registerApprovalRoutes } from "./sophia-approval.js";
 import { authenticatedWebRoutes, readJsonRequest, RequestBodyError } from "./web-routes.js";
@@ -146,6 +147,8 @@ export function apply(ctx, config) {
         stateDir: resolved.stateDir,
         isPendingMember: agentTeamsRuntime.isPendingMember,
         order: config.promptSectionOrder,
+        // The standing organisation, so a captain staffs the designed shape.
+        orgTreeText: ORG_TREE_TEXT,
         // Keep the bounded profile directory available without extra tool calls.
         // installTeamCapabilities snapshots this once; no business state rewrites it.
         captainPrompt: () => usageSectionText(TEAM_TOOL_NAMES.join(', '), formatProfilesForPrompt(config.profiles)),

@@ -42,6 +42,7 @@ import type { TeamMemberRow } from 'dsh-sophia-entities/orchestration/types'
 import { findTeamByCaptain } from './state.ts'
 import { formatProfilesForPrompt, type TeamProfileConfig } from './profiles.ts'
 import { installTeamCapabilities } from './capabilities.ts'
+import { ORG_TREE_TEXT } from './org-tree.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
 import { installSophiaApprovalPlane, registerApprovalRoutes, type ApprovalPlaneHandle } from './sophia-approval.ts'
 
@@ -211,6 +212,8 @@ export function apply(ctx: Context, config: Config): void {
     stateDir: resolved.stateDir,
     isPendingMember: agentTeamsRuntime.isPendingMember,
     order: config.promptSectionOrder,
+    // The standing organisation, so a captain staffs the designed shape.
+    orgTreeText: ORG_TREE_TEXT,
     // Keep the bounded profile directory available without extra tool calls.
     // installTeamCapabilities snapshots this once; no business state rewrites it.
     captainPrompt: () => usageSectionText(TEAM_TOOL_NAMES.join(', '), formatProfilesForPrompt(config.profiles)),
