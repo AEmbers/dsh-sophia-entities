@@ -727,11 +727,22 @@ export function registerAgentTeamsTools(ctx, config) {
             const created = await withTeamLock(captainLockKey(stateRoot, captain.id), async () => {
                 const current = await findTeamByParticipant(stateRoot, captain.id);
                 if (current !== undefined) {
-                    const relationship = current.captainSessionId === captain.id ? 'lead' : 'belong to';
-                    const guidance = current.captainSessionId === captain.id
-                        ? 'Use agent_teams_status and continue the existing team. Do not delete and recreate it merely to continue work. End it only when the user explicitly wants a separate new team.'
-                        : 'Continue your assigned member work and report to your captain; do not create a separate team.';
-                    throw new Error(`you already ${relationship} team "${current.name}" (id ${current.id}). ${guidance}`);
+                    const isOwn = current.captainSessionId === captain.id;
+                    // A member who already leads his own temporary team must finish or end
+                    // it before opening another. A member who merely BELONGS to a team
+                    // (the standing organisation, or a captain's team he was assigned
+                    // into) is free to open the small team that does his assigned work —
+                    // that is the designed dispatch path, and refusing it here would
+                    // force him to do the work inline and queue every later request.
+                    const isMemberOfSomeoneElses = !isOwn
+                        && current.members.some(member => member.id === captain.id && member.status !== 'removed') === true;
+                    if (!isMemberOfSomeoneElses) {
+                        const relationship = isOwn ? 'lead' : 'belong to';
+                        const guidance = isOwn
+                            ? 'Use agent_teams_status and continue the existing team. Do not delete and recreate it merely to continue work. End it only when the user explicitly wants a separate new team.'
+                            : 'Continue your assigned member work and report to your captain; do not create a separate team.';
+                        throw new Error(`you already ${relationship} team "${current.name}" (id ${current.id}). ${guidance}`);
+                    }
                 }
                 return withTeamLock(teamLockKey(stateRoot, teamId), async () => {
                     const existing = await readTeam(stateRoot, teamId);
