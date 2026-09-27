@@ -74,8 +74,14 @@ export function WorkspaceActivity({ sessionId, useTabInfo, t, state, modelDirect
     const snapshots = useSyncExternalStore(subscribeActivitySnapshots, getActivitySnapshotsSnapshot);
     const local = useSyncExternalStore(state.subscribe, state.getSnapshot);
     const [retry, setRetry] = useState(0);
-    const live = snapshots.teams.filter(team => team.captainSessionId === sessionId);
-    const archived = snapshots.archivedTeams.filter(team => team.captainSessionId === sessionId && !live.some(item => item.teamId === team.teamId));
+    // Persistent (ledger) teams carry no captain session — the ledger records
+    // members and tasks, not which conversation approved them — so a strict
+    // captain-session match hid them from this pane entirely, even though the
+    // server had them in the same feed. They belong to the workspace they were
+    // materialized in, which is the pane the owner is looking at.
+    const mine = (team) => team.mode === 'persistent' || team.captainSessionId === sessionId;
+    const live = snapshots.teams.filter(mine);
+    const archived = snapshots.archivedTeams.filter(team => mine(team) && !live.some(item => item.teamId === team.teamId));
     const historic = [...local.history.values()].filter(team => team.captainSessionId === sessionId
         && !live.some(item => item.teamId === team.teamId) && !archived.some(item => item.teamId === team.teamId))
         .map(team => historicCardTeam(team, sessionId));
