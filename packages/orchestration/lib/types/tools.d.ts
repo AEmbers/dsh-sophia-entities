@@ -19,6 +19,8 @@ export interface ApprovalToolSet {
     propose: unknown;
     review: unknown;
     approve: unknown;
+    addMember: unknown;
+    removeMember: unknown;
 }
 /**
  * Register the three approval tools on a cordis context.

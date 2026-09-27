@@ -139,6 +139,54 @@ export class SophiaTeamFacade {
         };
     }
     /**
+     * Staff one more member into an existing team.
+     *
+     * A plan rosters a team once; this is the only way to grow it afterwards, so a
+     * team that came up short (the host refused one name, a member was retired
+     * again) can be completed instead of rebuilt. Rebuilding is NOT an option: the
+     * first attempt already claimed every handle it managed to create.
+     *
+     * Human-only: adding a member creates a durable session that costs tokens, so
+     * it carries the same authority as approving the original roster.
+     */
+    async addMember(caller, ref, member) {
+        if (!caller.isHuman) {
+            throw new Error('only the Human owner may add a team member');
+        }
+        const backend = ref.mode === 'dag' ? this.dagBackend : this.persistentBackend;
+        if (!backend) {
+            throw new Error(`no backend is wired for mode '${ref.mode}'`);
+        }
+        if (!backend.addMember) {
+            throw new Error(`the '${ref.mode}' backend cannot add members — a ${ref.mode} team's roster is fixed when it materializes`);
+        }
+        return backend.addMember(this, ref.teamRef, member);
+    }
+    /**
+     * Retire one member from an existing team, releasing their handle.
+     *
+     * This is the counterpart the ledger's own rules force: handle uniqueness is
+     * checked against every member that is not `inactive` and still participates in
+     * the workspace, so archiving does NOT free a name. Without a real removal, a
+     * name claimed by a failed attempt stays unusable forever.
+     *
+     * Human-only, and irreversible: the member's private namespace is dropped and
+     * its session is disposed — the same contract as the host's own removal.
+     */
+    async removeMember(caller, ref, memberName) {
+        if (!caller.isHuman) {
+            throw new Error('only the Human owner may remove a team member');
+        }
+        const backend = ref.mode === 'dag' ? this.dagBackend : this.persistentBackend;
+        if (!backend) {
+            throw new Error(`no backend is wired for mode '${ref.mode}'`);
+        }
+        if (!backend.removeMember) {
+            throw new Error(`the '${ref.mode}' backend cannot remove members — a ${ref.mode} team's roster is fixed when it materializes`);
+        }
+        return backend.removeMember(this, ref.teamRef, memberName);
+    }
+    /**
      * Run the timeout sweep. Hosts call this from a timer; tests call it with a
      * fake clock. Returns the transitions that fired.
      */

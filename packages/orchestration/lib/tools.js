@@ -249,8 +249,84 @@ export function registerApprovalTools(ctx, dependencies) {
             });
         },
     });
+    const addMember = defineTool({
+        name: 'sophia_team_add_member',
+        description: 'Staff one more member into an existing team. Use this when a team came up short (the host refused a name, someone was removed) instead of rebuilding it — a rebuild is impossible, because the first attempt already holds every member name it created. Human-owner-only: adding a member creates a durable session that costs tokens. Name the member with one of the standing posts so the row still gets its portrait.',
+        parameters: {
+            mode: { type: 'string', required: true, enum: ['persistent', 'dag'], description: 'Which backend owns the team.' },
+            team_ref: { type: 'string', required: true, description: 'Backend team ref, e.g. from /state or a materialization result.' },
+            name: { type: 'string', required: true, description: 'The member display name, verbatim — it is what selects the OC portrait.' },
+            role: { type: 'string', description: 'Modern job title stored alongside the name (e.g. 后端开发工程师).' },
+            provider: { type: 'string', description: 'Model provider route; omit to inherit the default.' },
+            model: { type: 'string', description: 'Model id; requires provider.' },
+            reasoning_effort: { type: 'string', description: 'Reasoning effort id, when the model has one.' },
+        },
+        output: {
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    id: { type: 'string', required: true },
+                    name: { type: 'string', required: true },
+                    role: { type: 'string', required: true },
+                    state: { type: 'string', required: true },
+                    model: { type: 'string' },
+                },
+            },
+            render: (args, value) => [{
+                    type: 'text',
+                    text: `Added member ${value.name}${value.role ? ` (${value.role})` : ''} to ${args.team_ref} — now ${value.state} (${value.id}).`,
+                }],
+        },
+        async execute(args, exec) {
+            const caller = await resolveCaller(exec);
+            const facet = { isHuman: caller.isHuman, sessionId: caller.sessionId, handle: caller.handle, teamId: caller.teamId };
+            const row = await facade.addMember(facet, { mode: args.mode, teamRef: args.team_ref }, {
+                name: args.name,
+                role: args.role,
+                provider: args.provider,
+                model: args.model,
+                reasoningEffort: args.reasoning_effort,
+            });
+            return withoutUndefined({ id: row.id, name: row.name, role: row.role, state: row.state, model: row.model });
+        },
+    });
+    const removeMember = defineTool({
+        name: 'sophia_team_remove_member',
+        description: 'Permanently remove one member from an existing team, so their name becomes usable again. This is the ONLY way to free a member name: the ledger enforces handle uniqueness against every member that is not inactive and still participates in the workspace, so archiving a member does NOT release its name — measure an "already active" rejection means the name is still held by a member that only a removal can clear. Irreversible: the member private namespace is dropped and its session is disposed. Human-owner-only.',
+        parameters: {
+            mode: { type: 'string', required: true, enum: ['persistent', 'dag'], description: 'Which backend owns the team.' },
+            team_ref: { type: 'string', required: true, description: 'Backend team ref the member currently belongs to.' },
+            name: { type: 'string', required: true, description: 'The member display name to remove, exactly as it appears on the row.' },
+        },
+        output: {
+            schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    id: { type: 'string', required: true },
+                    name: { type: 'string', required: true },
+                    role: { type: 'string', required: true },
+                    state: { type: 'string', required: true },
+                    model: { type: 'string' },
+                },
+            },
+            render: (args, value) => [{
+                    type: 'text',
+                    text: `Removed member ${value.name} from ${args.team_ref} — state is now ${value.state}, so the name is free again.`,
+                }],
+        },
+        async execute(args, exec) {
+            const caller = await resolveCaller(exec);
+            const facet = { isHuman: caller.isHuman, sessionId: caller.sessionId, handle: caller.handle, teamId: caller.teamId };
+            const row = await facade.removeMember(facet, { mode: args.mode, teamRef: args.team_ref }, args.name);
+            return withoutUndefined({ id: row.id, name: row.name, role: row.role, state: row.state, model: row.model });
+        },
+    });
     ctx.tools.register(propose);
     ctx.tools.register(review);
     ctx.tools.register(approve);
-    return { propose, review, approve };
+    ctx.tools.register(addMember);
+    ctx.tools.register(removeMember);
+    return { propose, review, approve, addMember, removeMember };
 }

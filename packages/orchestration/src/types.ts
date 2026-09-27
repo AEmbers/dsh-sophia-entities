@@ -202,6 +202,28 @@ export interface TeamBackend {
    * label) — see `memberArtUrl` in the client package.
    */
   membersOf?(ctx: unknown, teamRef: string): Promise<readonly TeamMemberRow[]>
+  /**
+   * Add one member to an EXISTING team.
+   *
+   * A plan materializes its roster once and never grows; without this method a
+   * team that came up short can only be rebuilt from scratch, and a rebuild
+   * collides with the handles the first attempt already claimed. Optional:
+   * a backend with no growth path omits it and the caller reports that.
+   */
+  addMember?(ctx: unknown, teamRef: string, member: PlannedMember): Promise<TeamMemberRow>
+  /**
+   * Retire one member from an EXISTING team, releasing their handle.
+   *
+   * The ledger enforces handle uniqueness against every member that is not
+   * `inactive` AND still participates in the workspace, so archiving a member
+   * (`state: 'archived'`) does NOT free the name — only a real removal does.
+   * That is the whole reason this method exists: without it, a name claimed by
+   * a failed attempt is unusable forever and no one can re-staff it.
+   *
+   * `memberName` is the display handle the plan used, since that is what the
+   * owner sees and what the client matches artwork against.
+   */
+  removeMember?(ctx: unknown, teamRef: string, memberName: string): Promise<TeamMemberRow>
 }
 
 /** Host-side guesses that tools need; injected so the layer stays testable. */
