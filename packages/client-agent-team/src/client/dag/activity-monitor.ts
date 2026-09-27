@@ -42,6 +42,20 @@ export interface ActivityMessage {
   readonly content: string
 }
 
+/** One organisation bureau inside a standing team (server-supplied grouping). */
+export interface ActivityBureau {
+  /** Stable key, e.g. `observation`. */
+  readonly id: string
+  /** Display name, e.g. 观象司. */
+  readonly label: string
+  /** One-line mandate, shown as the group's subtitle. */
+  readonly mandate: string
+  /** The chief's post title, when the bureau has one. */
+  readonly chief?: string
+  /** Member names in this bureau, in the server's presentation order. */
+  readonly members: readonly string[]
+}
+
 /** One team snapshot (mirrors the host TeamActivitySnapshot). */
 export interface ActivityTeam {
   readonly workspace: string
@@ -61,6 +75,13 @@ export interface ActivityTeam {
   /** Volume counts for persistent (ledger) teams (P4.3 summary card). */
   readonly memberCount?: number
   readonly taskCount?: number
+  /**
+   * The standing organisation this team is staffed from, when the server knows
+   * it. Present only on a team whose roster is the designed 钦天监 tree, and
+   * only when the tree actually matches the roster — the panel must never draw
+   * a bureau around a member who is not in the team.
+   */
+  readonly org?: readonly ActivityBureau[]
 }
 
 /** A successfully-created conversation card that currently needs updates. */

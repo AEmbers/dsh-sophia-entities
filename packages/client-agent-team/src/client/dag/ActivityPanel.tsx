@@ -571,6 +571,46 @@ function DependencyMap({ tasks, members, t, discarded = false, workspace = false
   )
 }
 
+/**
+ * One member row of a persistent (ledger) team: portrait, post, modern job
+ * title, model.
+ *
+ * Shared by the flat list and the grouped-by-bureau view so both draw the same
+ * row. A ledger member carries no activity, so this row deliberately shows no
+ * progress bar and no action badge — the DAG rows have them because the DAG
+ * records them, and drawing zeroes here would read as measurements.
+ * @param member - the member row from the server snapshot.
+ * @returns the row, with the post's OC portrait when one matches.
+ */
+function PersistentMemberRow({ member }: { readonly member: ActivityMember }) {
+  const art = memberArtUrl(member.name, member.role)
+  const model = member.model ?? ''
+  return (
+    <li className={css.memberRow} data-persistent-member={member.id}>
+      <span className={css.memberAvatar}>
+        {art !== null ? (
+          <img className={css.memberArt} src={art} alt="" aria-hidden />
+        ) : (
+          <span className={css.memberInitial} style={{ background: accentOf(member.id) }}>
+            {memberInitial(member.name)}
+          </span>
+        )}
+      </span>
+      <span className={css.memberInfo}>
+        <span className={css.memberLine}>
+          <span className={css.memberName}>{member.name}</span>
+          {member.role !== '' && <span className={css.memberRole}>{member.role}</span>}
+          {model !== '' && (
+            <span className={css.memberModel} role="img" data-member-model={model} title={model} aria-label={model}>
+              {compactModelLabel(model)}
+            </span>
+          )}
+        </span>
+      </span>
+    </li>
+  )
+}
+
 export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscarded, onNavigate, t, historic = false, workspace = false }: {
   readonly team: ActivityTeam
   readonly modelDirectory?: ModelDirectory
@@ -665,36 +705,36 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
                 twenty posts. The two counts stay as the honest fallback for a
                 ledger that exposes volumes only. */}
             {team.members.length > 0 ? (
-              <ul className={css.persistentMembers} data-persistent-members={team.members.length}>
-                {team.members.map((member) => {
-                  const art = memberArtUrl(member.name, member.role)
-                  const model = member.model ?? ''
-                  return (
-                    <li key={member.id} className={css.memberRow} data-persistent-member={member.id}>
-                      <span className={css.memberAvatar}>
-                        {art !== null ? (
-                          <img className={css.memberArt} src={art} alt="" aria-hidden />
-                        ) : (
-                          <span className={css.memberInitial} style={{ background: accentOf(member.id) }}>
-                            {memberInitial(member.name)}
-                          </span>
+              team.org !== undefined && team.org.length > 0 ? (
+                /* The standing organisation: drawn as bureaux so an owner can
+                   see who answers to whom. The server only sends this grouping
+                   when every bureau is fully staffed, so a bureau here always
+                   has all of its colleagues present. */
+                <div className={css.persistentOrg} data-persistent-org={team.org.length}>
+                  {team.org.map((bureau) => (
+                    <section key={bureau.id} className={css.orgBureau} data-org-bureau={bureau.id}>
+                      <header className={css.orgBureauHead}>
+                        <span className={css.orgBureauName}>{bureau.label}</span>
+                        {bureau.chief !== undefined && (
+                          <span className={css.orgBureauChief}>{t('team.persistent.chief', { chief: bureau.chief })}</span>
                         )}
-                      </span>
-                      <span className={css.memberInfo}>
-                        <span className={css.memberLine}>
-                          <span className={css.memberName}>{member.name}</span>
-                          {member.role !== '' && <span className={css.memberRole}>{member.role}</span>}
-                          {model !== '' && (
-                            <span className={css.memberModel} role="img" data-member-model={model} title={model} aria-label={model}>
-                              {compactModelLabel(model)}
-                            </span>
-                          )}
-                        </span>
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
+                      </header>
+                      <p className={css.orgBureauMandate}>{bureau.mandate}</p>
+                      <ul className={css.persistentMembers}>
+                        {bureau.members.map((post) => {
+                          const member = team.members.find((candidate) => candidate.name === post)
+                          if (member === undefined) return null
+                          return <PersistentMemberRow key={member.id} member={member} />
+                        })}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <ul className={css.persistentMembers} data-persistent-members={team.members.length}>
+                  {team.members.map((member) => <PersistentMemberRow key={member.id} member={member} />)}
+                </ul>
+              )
             ) : (
               <>
                 <p className={css.persistentStat}>{t('team.persistent.members', { count: team.memberCount ?? 0 })}</p>

@@ -78,6 +78,15 @@ export interface TeamActivitySnapshot {
      */
     readonly memberCount?: number;
     readonly taskCount?: number;
+    /**
+     * The standing organisation this roster is staffed from, when every bureau's
+     * posts are all present in the team.
+     *
+     * Absent for a partial tree (a team mid-assembly, or a hand-written roster
+     * that merely shares some names), so the panel never draws a bureau implying
+     * colleagues who are not in the team.
+     */
+    readonly org?: readonly OrgGrouping[];
 }
 /** Snapshot projection switches for live and archived teams. */
 export interface TeamSnapshotOptions {
@@ -100,6 +109,22 @@ export declare function memberModelRoute(member: {
  * @returns the panel snapshot.
  */
 export declare function assembleTeamSnapshot(ctx: Context, stateRoot: string, workspace: string, state: TeamState, options?: TeamSnapshotOptions): Promise<TeamActivitySnapshot>;
+/**
+ * The standing organisation this roster is staffed from, when every member of
+ * a bureau is actually present in the team.
+ *
+ * Grouping is decided here rather than in the client so the decision is
+ * testable and shared, and it is deliberately conservative: a bureau is
+ * attached only when all of its posts are staffed. A half-staffed tree would
+ * otherwise draw groups implying colleagues who are not in the team.
+ */
+export interface OrgGrouping {
+    readonly id: string;
+    readonly label: string;
+    readonly mandate: string;
+    readonly chief?: string;
+    readonly members: readonly string[];
+}
 /**
  * Project one persistent (ledger) team into a panel snapshot (P4.3).
  *

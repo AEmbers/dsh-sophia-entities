@@ -10,6 +10,7 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { memberActivity } from "./members.js";
+import { ORG_TREE } from "./org-tree.js";
 import { CAPTAIN_KEY, listArchivedTeamIds, readArchivedTeam, readUnreadMailbox, readTeam, taskDepthsById, taskVisualState, } from "./state.js";
 /** The current task of a member: its first unfinished owned task. */
 function currentTaskOf(memberName, tasks) {
@@ -122,6 +123,33 @@ export async function assembleTeamSnapshot(ctx, stateRoot, workspace, state, opt
     };
 }
 /**
+ * The organisation grouping for a roster, or undefined when the roster is not
+ * the designed tree.
+ *
+ * Attached only when EVERY bureau is fully staffed: a partial tree is a team
+ * mid-assembly (or a hand-written roster that happens to share some names), and
+ * drawing bureaux for it would claim a structure the team does not have. Team
+ * size is the owner's to change, so a tree that does not fit is simply not
+ * grouped — never an error.
+ * @param members - the team's member rows.
+ * @returns the bureaux, or undefined when the roster is not the full tree.
+ */
+function orgGroupingFor(members) {
+    if (members.length === 0)
+        return undefined;
+    const staffed = new Set(members.map(member => member.name));
+    const complete = ORG_TREE.every(bureau => bureau.members.every(post => staffed.has(post)));
+    if (!complete)
+        return undefined;
+    return Object.freeze(ORG_TREE.map(bureau => Object.freeze({
+        id: bureau.id,
+        label: bureau.label,
+        mandate: bureau.mandate,
+        ...(bureau.chief === undefined ? {} : { chief: bureau.chief }),
+        members: bureau.members,
+    })));
+}
+/**
  * Project one persistent (ledger) team into a panel snapshot (P4.3).
  *
  * The persistent backend's `TeamSummary` carries only membership/task volumes
@@ -136,6 +164,23 @@ export async function assembleTeamSnapshot(ctx, stateRoot, workspace, state, opt
  * @returns the minimal persistent activity snapshot.
  */
 export function persistentTeamSnapshot(workspace, summary, rows) {
+    const members = Object.freeze((rows ?? []).map(row => Object.freeze({
+        id: row.id,
+        name: row.name,
+        role: row.role,
+        provider: '',
+        model: row.model ?? '',
+        reasoningEffort: '',
+        executionPrompt: '',
+        status: (row.state === 'inactive' || row.state === 'archived' ? 'removed' : 'idle'),
+        activity: 'unknown',
+        progress: 0,
+        done: 0,
+        total: 0,
+        currentTask: '',
+        unread: 0,
+    })));
+    const org = orgGroupingFor(members);
     return Object.freeze({
         workspace,
         teamId: summary.teamId,
@@ -148,27 +193,13 @@ export function persistentTeamSnapshot(workspace, summary, rows) {
         // filled with the fields it CAN source and neutral values elsewhere, which
         // lets the panel draw the member with its OC portrait instead of falling
         // back to a volume card. Absent rows keep the original minimal snapshot.
-        members: Object.freeze((rows ?? []).map(row => Object.freeze({
-            id: row.id,
-            name: row.name,
-            role: row.role,
-            provider: '',
-            model: row.model ?? '',
-            reasoningEffort: '',
-            executionPrompt: '',
-            status: (row.state === 'inactive' || row.state === 'archived' ? 'removed' : 'idle'),
-            activity: 'unknown',
-            progress: 0,
-            done: 0,
-            total: 0,
-            currentTask: '',
-            unread: 0,
-        }))),
+        members,
         tasks: Object.freeze([]),
         messageCount: 0,
         captainInbox: Object.freeze([]),
         memberCount: summary.memberCount,
         taskCount: summary.taskCount,
+        ...(org === undefined ? {} : { org }),
     });
 }
 /**

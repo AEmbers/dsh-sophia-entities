@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { memberActivity } from './members.ts'
+import { ORG_TREE } from './org-tree.ts'
 import type { TeamMemberRow, TeamSummary } from 'dsh-sophia-entities/orchestration/types'
 import {
   CAPTAIN_KEY, listArchivedTeamIds, readArchivedTeam, readUnreadMailbox, readTeam,
@@ -92,6 +93,15 @@ export interface TeamActivitySnapshot {
    */
   readonly memberCount?: number
   readonly taskCount?: number
+  /**
+   * The standing organisation this roster is staffed from, when every bureau's
+   * posts are all present in the team.
+   *
+   * Absent for a partial tree (a team mid-assembly, or a hand-written roster
+   * that merely shares some names), so the panel never draws a bureau implying
+   * colleagues who are not in the team.
+   */
+  readonly org?: readonly OrgGrouping[]
 }
 
 /** Snapshot projection switches for live and archived teams. */
@@ -218,6 +228,51 @@ export async function assembleTeamSnapshot(
 }
 
 /**
+ * The standing organisation this roster is staffed from, when every member of
+ * a bureau is actually present in the team.
+ *
+ * Grouping is decided here rather than in the client so the decision is
+ * testable and shared, and it is deliberately conservative: a bureau is
+ * attached only when all of its posts are staffed. A half-staffed tree would
+ * otherwise draw groups implying colleagues who are not in the team.
+ */
+export interface OrgGrouping {
+  readonly id: string
+  readonly label: string
+  readonly mandate: string
+  readonly chief?: string
+  readonly members: readonly string[]
+}
+
+/**
+ * The organisation grouping for a roster, or undefined when the roster is not
+ * the designed tree.
+ *
+ * Attached only when EVERY bureau is fully staffed: a partial tree is a team
+ * mid-assembly (or a hand-written roster that happens to share some names), and
+ * drawing bureaux for it would claim a structure the team does not have. Team
+ * size is the owner's to change, so a tree that does not fit is simply not
+ * grouped — never an error.
+ * @param members - the team's member rows.
+ * @returns the bureaux, or undefined when the roster is not the full tree.
+ */
+function orgGroupingFor(
+  members: readonly TeamActivityMember[],
+): readonly OrgGrouping[] | undefined {
+  if (members.length === 0) return undefined
+  const staffed = new Set(members.map(member => member.name))
+  const complete = ORG_TREE.every(bureau => bureau.members.every(post => staffed.has(post)))
+  if (!complete) return undefined
+  return Object.freeze(ORG_TREE.map(bureau => Object.freeze({
+    id: bureau.id,
+    label: bureau.label,
+    mandate: bureau.mandate,
+    ...(bureau.chief === undefined ? {} : { chief: bureau.chief }),
+    members: bureau.members,
+  })))
+}
+
+/**
  * Project one persistent (ledger) team into a panel snapshot (P4.3).
  *
  * The persistent backend's `TeamSummary` carries only membership/task volumes
@@ -236,6 +291,23 @@ export function persistentTeamSnapshot(
   summary: TeamSummary,
   rows?: readonly TeamMemberRow[],
 ): TeamActivitySnapshot {
+  const members = Object.freeze((rows ?? []).map(row => Object.freeze({
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    provider: '',
+    model: row.model ?? '',
+    reasoningEffort: '',
+    executionPrompt: '',
+    status: (row.state === 'inactive' || row.state === 'archived' ? 'removed' : 'idle') as MemberStatus,
+    activity: 'unknown' as const,
+    progress: 0,
+    done: 0,
+    total: 0,
+    currentTask: '',
+    unread: 0,
+  })))
+  const org = orgGroupingFor(members)
   return Object.freeze({
     workspace,
     teamId: summary.teamId,
@@ -248,27 +320,13 @@ export function persistentTeamSnapshot(
     // filled with the fields it CAN source and neutral values elsewhere, which
     // lets the panel draw the member with its OC portrait instead of falling
     // back to a volume card. Absent rows keep the original minimal snapshot.
-    members: Object.freeze((rows ?? []).map(row => Object.freeze({
-      id: row.id,
-      name: row.name,
-      role: row.role,
-      provider: '',
-      model: row.model ?? '',
-      reasoningEffort: '',
-      executionPrompt: '',
-      status: (row.state === 'inactive' || row.state === 'archived' ? 'removed' : 'idle') as MemberStatus,
-      activity: 'unknown' as const,
-      progress: 0,
-      done: 0,
-      total: 0,
-      currentTask: '',
-      unread: 0,
-    }))),
+    members,
     tasks: Object.freeze([]),
     messageCount: 0,
     captainInbox: Object.freeze([]),
     memberCount: summary.memberCount,
     taskCount: summary.taskCount,
+    ...(org === undefined ? {} : { org }),
   })
 }
 
