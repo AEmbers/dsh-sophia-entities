@@ -22,7 +22,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import { ActivitySurface, WorkspaceActivity, createWorkspaceBridge, TEAM_TAB_ID, TEAM_TAB_KIND } from './WorkspaceActivity.tsx'
 import { TeamChatEntry, TeamTurnCard } from './TeamChatEntry.tsx'
 import { createWorkspaceState } from './workspace-state.ts'
-import { AgentTeamsCard, type AgentTeamsCardInjected } from './AgentTeamsCard.tsx'
+import { AgentTeamsCard, type AgentTeamsCardInjected, OPEN_PANEL_EVENT } from './AgentTeamsCard.tsx'
 import type { ActivityPanelProps } from './ActivityPanel.tsx'
 import { agentTeamsCardDefinition } from './agent-teams-card-definition.ts'
 import { sophiaApprovalCardDefinition } from './sophia-approval-card-definition.ts'
@@ -40,7 +40,18 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Required services: conversation nodes, slots, sessions navigation, and locale. */
+/**
+ * Required services: conversation nodes, slots, sessions navigation, and locale.
+ *
+ * `sidebarRight` / `sidebarRightTabs` are deliberately NOT listed here. They are
+ * optional right-pane hosts: a host (or a test composition) without them must
+ * still get the approval badge and the two conversation cards. Declaring them
+ * made the whole module suspend — `mount would suspend: missing service(s)
+ * sidebarRight, sidebarRightTabs — provide() them first` — and took the badge
+ * and both cards down with it. The right-pane contributions are registered
+ * through the scoped `ctx.inject` below instead, so their absence removes only
+ * the panel and its tab.
+ */
 export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'modelDirectories', 'layout']
 
 /** The host supplies this hook for the lifetime of a 0.1.5 root slot. */
@@ -172,6 +183,13 @@ export function apply(ctx: ClientContext): void {
     id: 'sophia-approval-badge',
     order: 150,
     locale: AGENT_TEAMS_LOCALE_NAMESPACE,
-    inject: (): SophiaApprovalBadgeInjected => ({}),
+    inject: (): SophiaApprovalBadgeInjected => ({
+      // A click must go somewhere. The pending-proposal cards live in the
+      // conversation's own fold, so the reachable owner surface is the activity
+      // panel: open it on the deciding session's tab and let the panel show the
+      // waiting proposal there. Without this handler the badge was a dead end —
+      // it displayed a count and did nothing when pressed.
+      onOpenApprovals: () => { window.dispatchEvent(new CustomEvent(OPEN_PANEL_EVENT, { detail: {} })) },
+    }),
   }, SophiaApprovalBadge))
 }
