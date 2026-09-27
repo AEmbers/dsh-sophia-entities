@@ -102,3 +102,69 @@ describe('persistent backend membersOf', () => {
     expect(rows?.map(row => row.name)).toEqual(['星文审校'])
   })
 })
+
+describe('persistent backend member cap reporting', () => {
+  /** A backend whose `addMember` throws the host's own roster-cap error. */
+  function cappedBackend(cap: number, failAt: number) {
+    let seen = 0
+    return createSophiaPersistentBackend({
+      host: {
+        createChannel: async () => ({ channel: { channelRef: CHANNEL } }) as never,
+        addMember: async () => {
+          const index = seen
+          seen += 1
+          if (index >= failAt) throw new Error(`Team member limit ${cap} reached`)
+          return { status: { member: { handle: `m${index}`, memberId: `id${index}` } } } as never
+        },
+        sendMessage: async () => ({}) as never,
+        view: () => viewWith([]),
+      },
+      workspaceId: WORKSPACE,
+    })
+  }
+
+  const REQUEST = {
+    id: 'req-1',
+    requester: 'human',
+    goal: 'staff the observatory',
+    plan: {
+      members: Array.from({ length: 20 }, (_, i) => ({ name: `岗位${i}`, role: '测试工程师' })),
+      tasks: [],
+    },
+    state: 'pending_owner',
+    createdAt: 1,
+    updatedAt: 1,
+  } as never
+
+  it('explains which two numbers disagree instead of surfacing the bare host error', async () => {
+    // 8 seats, so the ninth member crosses the host cap.
+    const backend = cappedBackend(8, 8)
+
+    const failure = await backend.create({}, REQUEST).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(Error)
+    const message = (failure as Error).message
+    expect(message).toContain('20 名成员')
+    expect(message).toContain('8')
+    // Names the member that was rejected, so the owner can count.
+    expect(message).toContain('第 9 名「岗位8」')
+    // Says the Human is not part of the number — the owner's own question.
+    expect(message).toContain('主人本人不计入')
+    // And hands over the exact config snippet, pre-filled with the right cap.
+    expect(message).toContain('maxMembers: 20')
+  })
+
+  it('leaves unrelated host failures alone', async () => {
+    const backend = createSophiaPersistentBackend({
+      host: {
+        createChannel: async () => ({ channel: { channelRef: CHANNEL } }) as never,
+        addMember: async () => { throw new Error('unknown Workspace \'default\'') },
+        sendMessage: async () => ({}) as never,
+        view: () => viewWith([]),
+      },
+      workspaceId: WORKSPACE,
+    })
+
+    await expect(backend.create({}, REQUEST)).rejects.toThrow('unknown Workspace')
+  })
+})
