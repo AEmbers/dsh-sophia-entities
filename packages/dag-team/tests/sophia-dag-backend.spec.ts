@@ -9,7 +9,7 @@
  * used to fail: the request stayed `pending_owner` and the card showed a bare
  * HTTP 500. These tests pin the wiring so it cannot silently come undone.
  */
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -24,12 +24,21 @@ import type { TeamState } from '../src/types.ts'
 const CAPTAIN = { session: { header: { cwd: 'C:/workspace' } } } as unknown as Agent
 const OTHER_CAPTAIN = { session: { header: { cwd: 'C:/elsewhere' } } } as unknown as Agent
 
+/** A plan the backend will accept: one member and one task (the runnable rule). */
+const RUNNABLE_PLAN = {
+  members: [{ name: 'alice' }],
+  tasks: [{ id: 't1', subject: 'polish the panel', dependencies: [] }],
+}
+
+/** The goal-only plan shape — exactly what an unplanned proposal carries. */
+const EMPTY_PLAN = { members: [], tasks: [] }
+
 function request(overrides: Partial<ApprovalRequest> = {}): ApprovalRequest {
   return {
     id: 'req-1',
     requester: 'human',
     goal: 'Polish the activity panel',
-    plan: { members: [], tasks: [] },
+    plan: RUNNABLE_PLAN,
     state: 'pending_owner',
     createdAt: 1,
     updatedAt: 1,
@@ -161,5 +170,54 @@ describe('createSophiaDagBackend host wiring', () => {
     const result: MaterializeResult = await backend.create({}, request())
     expect(calls[0]?.stateRoot).toBe(stateRoot)
     expect(result.teamRef).toBeDefined()
+  })
+})
+
+/**
+ * The runnable rule, on the approval-driven path.
+ *
+ * `validateStagedGraph(..., requireRunnable)` has always refused a plan with no
+ * members or no tasks — but that guard only runs on the STAGED path
+ * (`approveStagedTeam`). `create` went straight to `materializePlan`, so an
+ * owner approval of a goal-only plan (the shape both stuck production requests
+ * carry: `{ members: [], tasks: [] }`) committed an empty team directory that
+ * could never do anything.
+ */
+describe('createSophiaDagBackend runnable guard', () => {
+  it('refuses a plan with no members and creates nothing', async () => {
+    const { runtime, calls } = stubRuntime()
+    const stateRoot = tempRoot()
+    const backend = createSophiaDagBackend({ materializePlan: runtime.materializePlan, hostContext: () => ({ captain: CAPTAIN, stateRoot }) })
+
+    await expect(backend.create({}, request({ plan: EMPTY_PLAN }))).rejects.toMatchObject({ code: 'empty_plan' })
+
+    // The guard fires BEFORE materialization, so no team directory is written.
+    expect(calls).toEqual([])
+    expect(readdirSync(stateRoot)).toEqual([])
+  })
+
+  it('refuses a plan with no tasks', async () => {
+    const { runtime, calls } = stubRuntime()
+    const stateRoot = tempRoot()
+    const backend = createSophiaDagBackend({ materializePlan: runtime.materializePlan, hostContext: () => ({ captain: CAPTAIN, stateRoot }) })
+
+    await expect(backend.create({}, request({ plan: { members: [{ name: 'alice' }], tasks: [] } })))
+      .rejects.toMatchObject({ code: 'empty_plan' })
+    expect(calls).toEqual([])
+    expect(readdirSync(stateRoot)).toEqual([])
+  })
+
+  it('still reports the wiring bugs first, and accepts a runnable plan', async () => {
+    const { runtime, calls } = stubRuntime()
+    const stateRoot = tempRoot()
+    const bare = createSophiaDagBackend({ materializePlan: runtime.materializePlan })
+
+    // A missing captain/state root is a host wiring bug, not an empty plan.
+    await expect(bare.create({}, request({ plan: EMPTY_PLAN }))).rejects.toThrow('ctx.captain is required')
+    await expect(bare.create({ captain: CAPTAIN }, request({ plan: EMPTY_PLAN }))).rejects.toThrow('ctx.stateRoot is required')
+
+    const backend = createSophiaDagBackend({ materializePlan: runtime.materializePlan, hostContext: () => ({ captain: CAPTAIN, stateRoot }) })
+    await expect(backend.create({}, request())).resolves.toMatchObject({ mode: 'dag' })
+    expect(calls).toHaveLength(1)
   })
 })

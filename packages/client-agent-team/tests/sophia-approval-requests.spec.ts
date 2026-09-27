@@ -1,11 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  APPROVAL_REFUSAL_KEYS,
   APPROVALS_PLAN_URL,
+  ApprovalPlanError,
+  approvalErrorMessage,
+  approvalRefusalCode,
   fetchApprovalRequestState,
   postApprovalPlanAction,
   type SophiaApprovalPlanAction,
 } from '../src/client/dag/sophia-approval-requests.ts'
+import { en, zh, type AgentTeamsTranslate } from '../src/client/dag/locales.ts'
 import { APPROVALS_STATE_URL } from '../src/client/dag/sophia-approval-badge.ts'
+
+/** The English dictionary behind the translator seam. */
+const translateEn: AgentTeamsTranslate = (key) => en[key] ?? key
 
 interface Call { readonly url: string; readonly init: RequestInit | undefined }
 
@@ -76,15 +84,61 @@ describe('postApprovalPlanAction', () => {
     expect(none.length).toBe(0)
   })
 
-  it('surfaces the host error message instead of the bare status', async () => {
-    stubFetch(new Response(JSON.stringify({ error: 'sessionId is required' }), { status: 400 }))
+  // Regression: a refused action surfaced the host's own sentence, and with no
+  // JSON body the bare status — so the panel echoed "… is not awaiting owner
+  // decision (pending_captain)" and "HTTP 500" at the owner. The host now
+  // answers a known refusal with 409 `{error, code, state}`; the code maps to
+  // client wording and the host's sentence never leaves the error object.
+  it('maps a known refusal code to client wording and keeps the host text for logs', async () => {
+    stubJson({
+      error: 'request req-3 is not awaiting owner decision (pending_captain)',
+      code: 'not_awaiting_owner',
+      state: 'pending_captain',
+    }, 409)
+    const thrown = await postApprovalPlanAction('sess-1', { action: 'reject', requestId: 'req-3' })
+      .catch((cause: unknown) => cause)
+    expect(thrown).toBeInstanceOf(ApprovalPlanError)
+    const refusal = thrown as ApprovalPlanError
+    expect(refusal.code).toBe('not_awaiting_owner')
+    expect(refusal.state).toBe('pending_captain')
+    expect(refusal.status).toBe(409)
+    expect(refusal.messageKey).toBe('approval.error.notAwaitingOwner')
+    expect(refusal.message).toBe(zh['approval.error.notAwaitingOwner'])
+    // The host's sentence survives for diagnostics and is never the copy.
+    expect(refusal.hostMessage).toContain('is not awaiting owner decision')
+    expect(refusal.message).not.toContain('pending_captain')
+    expect(refusal.message).not.toContain('is not awaiting')
+  })
+
+  it('falls back to the generic wording for an unknown code, and for none at all', async () => {
+    stubJson({ error: 'something the host said', code: 'brand_new_reason' }, 409)
     await expect(postApprovalPlanAction('sess-1', { action: 'reject', requestId: 'req-3' }))
-      .rejects.toThrow('sessionId is required')
+      .rejects.toThrow(zh['approval.error.generic'])
 
     vi.unstubAllGlobals()
     stubFetch(new Response('nope', { status: 500 }))
     await expect(postApprovalPlanAction('sess-1', { action: 'reject', requestId: 'req-3' }))
-      .rejects.toThrow('HTTP 500')
+      .rejects.toThrow(zh['approval.error.generic'])
+
+    vi.unstubAllGlobals()
+    stubJson({ error: 'sessionId is required' }, 400)
+    await expect(postApprovalPlanAction('sess-1', { action: 'reject', requestId: 'req-3' }))
+      .rejects.toThrow(zh['approval.error.generic'])
+  })
+
+  it('names every refusal code the host can send, in both dictionaries', async () => {
+    for (const [code, key] of Object.entries(APPROVAL_REFUSAL_KEYS)) {
+      expect(approvalRefusalCode(code)).toBe(code)
+      expect(zh[key]).toBeTruthy()
+      expect(en[key]).toBeTruthy()
+      vi.unstubAllGlobals()
+      stubJson({ error: 'refused', code, state: 'pending_owner' }, 409)
+      const thrown = await postApprovalPlanAction('sess-1', { action: 'reject', requestId: 'req-3' })
+        .catch((cause: unknown) => cause) as ApprovalPlanError
+      expect(thrown.messageKey).toBe(key)
+    }
+    expect(approvalRefusalCode('nope')).toBeUndefined()
+    expect(approvalRefusalCode(undefined)).toBeUndefined()
   })
 
   it('resolves quietly on an ok response', async () => {
@@ -145,5 +199,32 @@ describe('fetchApprovalRequestState', () => {
     const none = stubJson({ requests: [] })
     await expect(fetchApprovalRequestState('  ')).resolves.toBeUndefined()
     expect(none.length).toBe(0)
+  })
+})
+
+describe('approvalErrorMessage', () => {
+  it('renders a refusal through the active dictionary', () => {
+    const refusal = new ApprovalPlanError(409, 'empty_plan', 'pending_owner', 'the plan had no members')
+    expect(approvalErrorMessage(refusal)).toBe(zh['approval.error.emptyPlan'])
+    expect(approvalErrorMessage(refusal, translateEn)).toBe(en['approval.error.emptyPlan'])
+  })
+
+  // The four things the owner must never be shown: a bare status, the host's
+  // "is not awaiting owner decision" sentence, an internal state name, or a
+  // request id.
+  it('scrubs host internals out of anything else it is handed', () => {
+    expect(approvalErrorMessage(new Error('request req-9 is not awaiting owner decision (pending_captain)')))
+      .toBe(zh['approval.error.generic'])
+    expect(approvalErrorMessage(new Error('HTTP 500'))).toBe(zh['approval.error.generic'])
+    expect(approvalErrorMessage(new Error('pending_owner is not a terminal state')))
+      .toBe(zh['approval.error.generic'])
+    expect(approvalErrorMessage('')).toBe(zh['approval.error.generic'])
+  })
+
+  // A client-side precondition names no host internals, so it is still worth
+  // showing: it is a bug report about this panel, not a state the owner hit.
+  it('keeps a client-side precondition message', () => {
+    expect(approvalErrorMessage(new Error('approval actions require the viewing session id')))
+      .toBe('approval actions require the viewing session id')
   })
 })

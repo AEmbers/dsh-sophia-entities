@@ -16,6 +16,7 @@
  * reason; duplicate proposals are rejected by goal/plan hash.
  */
 import { randomUUID } from 'node:crypto';
+import { approvalErrorCodeOf, ApprovalTransitionError } from "./errors.js";
 import { approvalsRootOf, goalDigest, listApprovals, readApproval, withLock, writeApproval, } from "./store.js";
 export const DEFAULT_TIMEOUTS = {
     pendingCaptainMs: 10 * 60 * 1000,
@@ -33,10 +34,24 @@ export function isTerminalState(state) {
 /** Stores a transition outcome that failed AFTER the record changed. */
 export class MaterializeError extends Error {
     request;
-    constructor(message, request) {
+    /**
+     * The code the HTTP layer reports: the underlying cause's code when it has
+     * one (e.g. a backend `empty_plan`), else the generic `materialize_failed`.
+     */
+    code;
+    /**
+     * The state the record KEEPS when materialization fails — the pre-decision
+     * state, which is what the card must be told (§4.2: a failed materialization
+     * never burns the decision). `request.state` is the *would-be* state
+     * (`approved`), so it is deliberately not the source for the response.
+     */
+    state;
+    constructor(message, request, code = 'materialize_failed', state = request.state) {
         super(message);
         this.request = request;
         this.name = 'MaterializeError';
+        this.code = code;
+        this.state = state;
     }
 }
 export class ApprovalRouter {
@@ -142,7 +157,7 @@ export class ApprovalRouter {
         return this.store.withLock(`request:${requestId}`, async () => {
             const request = await this.requireRequest(requestId);
             if (request.state !== 'pending_captain') {
-                throw new Error(`request ${requestId} is not awaiting captain review (${request.state})`);
+                throw new ApprovalTransitionError('not_awaiting_captain', `request ${requestId} is not awaiting captain review (${request.state})`, request.state);
             }
             if (request.requester.kind !== 'member') {
                 throw new Error('only member proposals pass through captain review');
@@ -200,7 +215,7 @@ export class ApprovalRouter {
         return this.store.withLock(`request:${requestId}`, async () => {
             const request = await this.requireRequest(requestId);
             if (request.state !== 'pending_owner' && request.state !== 'draft') {
-                throw new Error(`request ${requestId} is not awaiting owner decision (${request.state})`);
+                throw new ApprovalTransitionError('not_awaiting_owner', `request ${requestId} is not awaiting owner decision (${request.state})`, request.state);
             }
             if (verdict.decision === 'reject') {
                 const rejected = {
@@ -225,7 +240,7 @@ export class ApprovalRouter {
                 expiresAt: undefined,
                 updatedAt: this.getNow(),
             };
-            const result = await this.materializeOrHalt(approved, mode, 'materialized');
+            const result = await this.materializeOrHalt(approved, mode, 'materialized', request.state);
             await this.store.writeApproval(this.root(), result.request);
             return { request: result.request, materialized: result.materialized };
         });
@@ -233,6 +248,13 @@ export class ApprovalRouter {
     /**
      * Apply the timeout table to every stored request. Returns the transitions
      * that happened. Safe to call repeatedly (idempotent per state).
+     *
+     * Hosts must call this REPEATEDLY, not once at startup: the expiry table is
+     * what moves a request out of `pending_captain` / `pending_owner`, so a queue
+     * served without a sweep keeps handing out rows that are already past their
+     * deadline (and no one is entitled to decide them any more). The plugin wires
+     * it on the approval-queue read path plus a background timer; a one-shot
+     * startup sweep would only postpone the same stale row.
      */
     async sweepExpired() {
         const now = this.getNow();
@@ -304,7 +326,14 @@ export class ApprovalRouter {
      * pre-materialization state so the decision is not burned by a transient
      * backend error (§4.2 "materialize 唯一分派点").
      */
-    async materializeOrHalt(request, mode, successState) {
+    async materializeOrHalt(request, mode, successState, 
+    /**
+     * The state the record keeps when materialization fails. Defaults to the
+     * candidate's own state (the review path lands on `pending_captain` either
+     * way); `approve` passes the pre-decision state explicitly, because its
+     * candidate sits at `approved` while the record stays `pending_owner`.
+     */
+    heldState = request.state) {
         if (!this.materializeHook) {
             throw new Error('orchestration facade not initialized — setMaterializeHook was not called');
         }
@@ -313,8 +342,10 @@ export class ApprovalRouter {
             return { request: { ...request, state: successState }, materialized };
         }
         catch (error) {
-            // Leave state untouched; surface the failure to the caller.
-            throw new MaterializeError(`materialization failed: ${error.message}`, { ...request, updatedAt: this.getNow() });
+            // Leave state untouched; surface the failure to the caller. A backend
+            // refusal that carries a code (e.g. `empty_plan`) is passed through so the
+            // card can explain it; anything else is a generic materialize failure.
+            throw new MaterializeError(`团队创建失败：${error.message}`, { ...request, updatedAt: this.getNow() }, approvalErrorCodeOf(error) ?? 'materialize_failed', heldState);
         }
     }
 }

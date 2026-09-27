@@ -1437,6 +1437,14 @@
   line-height: 15px;
 }
 
+/* A row the owner cannot decide: it is waiting on the captain, so it carries a
+ * label instead of controls and never any error text. */
+.approvalWaiting {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .approvalActions {
   display: flex;
   gap: 8px;

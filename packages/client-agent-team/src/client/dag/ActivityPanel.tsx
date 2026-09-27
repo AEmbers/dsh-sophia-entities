@@ -61,7 +61,7 @@ import {
 import { ACTION_ART, LEAD_ART, memberArtUrl } from './artwork.ts'
 import { OPEN_PANEL_EVENT } from './AgentTeamsCard.tsx'
 import { startApprovalBadgePolling, type SophiaApprovalSnapshotRow } from './sophia-approval-badge.ts'
-import { postApprovalPlanAction } from './sophia-approval-requests.ts'
+import { approvalErrorMessage, postApprovalPlanAction } from './sophia-approval-requests.ts'
 import { StagingPlanEditor } from './StagingPlanEditor.tsx'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
 import type { AgentTeamsLocaleKey, AgentTeamsTranslate } from './locales.ts'
@@ -192,6 +192,11 @@ function taskTone(state: ActivityTask['state'], status: string): string {
  * it and the badge's click had nowhere to go. The panel is always mounted, so
  * it reads the same host queue the badge polls and offers the owner controls
  * here — one durable place to approve, independent of chat scrollback.
+ *
+ * Only a `pending_owner` row is the owner's to decide. A `pending_captain` row
+ * is waiting on the captain, so it renders a non-interactive label: showing
+ * [批准][退回] there answered every click with the host's refusal, because the
+ * owner route is not the route that settles it.
  */
 export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }: {
   readonly sessionId: string
@@ -202,7 +207,7 @@ export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }: 
 }) {
   const [rows, setRows] = useState<readonly SophiaApprovalSnapshotRow[]>([])
   const [busyId, setBusyId] = useState<string | undefined>()
-  const [error, setError] = useState<string | undefined>()
+  const [error, setError] = useState<{ readonly requestId: string; readonly message: string } | undefined>()
 
   useEffect(() => {
     const controller = startApprovalBadgePolling(() => {}, {}, (next) => {
@@ -220,9 +225,13 @@ export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }: 
     const payload = decision === 'approve'
       ? { action: 'approve' as const, requestId, decision: 'approve' as const }
       : { action: 'reject' as const, requestId }
+    // A refused action keeps its row: the proposal is still pending, so the
+    // owner must be able to look at it and decide again (notably [退回] after a
+    // refused [批准]). Only a settled action removes a row, and the host is the
+    // one that says so.
     void postApprovalPlanAction(sessionId, payload)
       .then(() => { setRows((current) => current.filter((row) => row.id !== requestId)) })
-      .catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
+      .catch((cause: unknown) => { setError({ requestId, message: approvalErrorMessage(cause, t) }) })
       .finally(() => { setBusyId(undefined) })
   }
 
@@ -234,35 +243,42 @@ export function PendingApprovals({ sessionId, onRows, placement = 'panel', t }: 
       aria-label={t('approval.badge.title')}
       data-pending-approvals={rows.length}
     >
-      {rows.map((row) => (
-        <article key={row.id} className={css.approvalRow} data-request-id={row.id} data-mode={row.mode ?? 'unset'}>
-          <span className={css.approvalGoal}>{row.goal}</span>
-          <span className={css.approvalMeta}>
-            {t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`)}
-          </span>
-          {error !== undefined && busyId === undefined && (
-            <span className={css.approvalError} role="alert">{error}</span>
-          )}
-          <span className={css.approvalActions}>
-            <button
-              type="button"
-              className={css.approvalApprove}
-              disabled={busyId !== undefined}
-              onClick={() => { act(row.id, 'approve') }}
-            >
-              {t('approval.approve')}
-            </button>
-            <button
-              type="button"
-              className={css.approvalReject}
-              disabled={busyId !== undefined}
-              onClick={() => { act(row.id, 'reject') }}
-            >
-              {t('approval.reject')}
-            </button>
-          </span>
-        </article>
-      ))}
+      {rows.map((row) => {
+        const owner = row.state === 'pending_owner'
+        return (
+          <article key={row.id} className={css.approvalRow} data-request-id={row.id} data-mode={row.mode ?? 'unset'} data-state={row.state}>
+            <span className={css.approvalGoal}>{row.goal}</span>
+            <span className={css.approvalMeta}>
+              {t(`approval.mode.${row.mode === 'persistent' ? 'persistent' : 'dag'}`)}
+            </span>
+            {owner && error !== undefined && error.requestId === row.id && busyId === undefined && (
+              <span className={css.approvalError} role="alert">{error.message}</span>
+            )}
+            {owner
+              ? (
+                  <span className={css.approvalActions}>
+                    <button
+                      type="button"
+                      className={css.approvalApprove}
+                      disabled={busyId !== undefined}
+                      onClick={() => { act(row.id, 'approve') }}
+                    >
+                      {t('approval.approve')}
+                    </button>
+                    <button
+                      type="button"
+                      className={css.approvalReject}
+                      disabled={busyId !== undefined}
+                      onClick={() => { act(row.id, 'reject') }}
+                    >
+                      {t('approval.reject')}
+                    </button>
+                  </span>
+                )
+              : <span className={css.approvalWaiting}>{t('approval.row.waitingCaptain')}</span>}
+          </article>
+        )
+      })}
     </section>
   )
 }

@@ -10,6 +10,7 @@
  * handler shapes but the host attaches them with the cards in P3.
  */
 import type { SophiaTeamFacade, CallerIdentity } from './facade.ts';
+export { APPROVAL_ERROR_MESSAGES, ApprovalTransitionError, EmptyPlanError, approvalErrorCodeOf, toApprovalHttpError, type ApprovalErrorCode, type ApprovalHttpError, type ApprovalHttpErrorBody, } from './errors.ts';
 /** Approvals queue snapshot for the badge/cards. */
 export interface ApprovalsSnapshot {
     requests: Array<{
@@ -32,7 +33,20 @@ export interface ApprovalPlanAction {
     /** review. */
     reason?: string;
 }
-/** Read the approval queue. */
+/**
+ * Read the approval queue.
+ *
+ * Read-time reconciliation (deliberate write on a read path): the queue is what
+ * the panel and the badge poll, and it must never serve a row whose timeout has
+ * already passed — such a row is stuck by construction, because the state it
+ * sits in (`pending_captain` with no captain able to decide, or an owner request
+ * nobody was told about) has no way out on its own. Sweeping first applies the
+ * published timeout table (§4.5: pending_captain → pending_owner, the rest →
+ * expired) so the very poll that reads the queue also reconciles it. The same
+ * sweep also runs on a background timer in the plugin (sophia-approval.ts), so
+ * the queue still moves when nobody has a panel open; this call is what makes
+ * the guarantee observable within a single poll.
+ */
 export declare function snapshotApprovals(facade: SophiaTeamFacade): Promise<ApprovalsSnapshot>;
 /** Dispatch one plan action with the caller identity resolved by the host. */
 export declare function runApprovalPlanAction(facade: SophiaTeamFacade, caller: CallerIdentity, action: ApprovalPlanAction): Promise<unknown>;

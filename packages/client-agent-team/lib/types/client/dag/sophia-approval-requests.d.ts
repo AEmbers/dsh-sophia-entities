@@ -5,6 +5,7 @@
  * @module dsh-sophia-entities/client/sophia-approval-requests
  */
 import type { TeamMode } from 'dsh-sophia-entities/orchestration/types';
+import { type AgentTeamsLocaleKey, type AgentTeamsTranslate } from './locales.ts';
 /** POST body target for approval-plan actions (design §4.4.2 / routes.ts). */
 export declare const APPROVALS_PLAN_URL = "/plugins/dsh-sophia-entities/approvals/plan";
 /** A captain-side verdict for a pending_captain proposal. */
@@ -47,9 +48,49 @@ export interface SophiaApprovalPlanResult {
     readonly teamRef?: string;
 }
 /**
+ * Why the host refused a plan action. A known refusal answers 409 with
+ * `{error, code, state}`; the client renders its own wording for the `code` so
+ * the host's sentence — which names internal state names and request ids —
+ * never reaches the UI.
+ */
+export type ApprovalRefusalCode = 'not_awaiting_owner' | 'not_awaiting_captain' | 'captain_only' | 'human_only' | 'empty_plan' | 'materialize_failed';
+/** Locale key that renders each known refusal. */
+export declare const APPROVAL_REFUSAL_KEYS: Readonly<Record<ApprovalRefusalCode, AgentTeamsLocaleKey>>;
+/** Wording for a refusal the host gave no code for, and for anything raw. */
+export declare const APPROVAL_ERROR_GENERIC_KEY: AgentTeamsLocaleKey;
+/** Narrow the host's `code` field to the refusals this build knows. */
+export declare function approvalRefusalCode(value: unknown): ApprovalRefusalCode | undefined;
+/**
+ * One refused plan action, carrying wording the UI is allowed to show.
+ *
+ * `message` is Simplified Chinese — the dictionary's source of truth — so a
+ * caller with no translator still renders a sentence rather than the host's
+ * own text; `messageKey` is what a localized surface renders instead. The
+ * host's raw sentence survives as `hostMessage` for logs only.
+ */
+export declare class ApprovalPlanError extends Error {
+    /** The refusal code, when the host named one this build knows. */
+    readonly code: ApprovalRefusalCode | undefined;
+    /** The state the host reported for the request, when it reported one. */
+    readonly state: string | undefined;
+    /** HTTP status of the refused response. */
+    readonly status: number;
+    /** Locale key a translated surface renders. */
+    readonly messageKey: AgentTeamsLocaleKey;
+    /** The host's own `error` string; diagnostics only, never the UI. */
+    readonly hostMessage: string | undefined;
+    constructor(status: number, code: ApprovalRefusalCode | undefined, state: string | undefined, hostMessage: string | undefined);
+}
+/**
+ * Keep a string the UI may show. Anything that would leak a state name, a
+ * request id or a bare HTTP status becomes the generic wording instead.
+ */
+export declare function sanitizeApprovalMessage(message: string): string;
+/**
  * Fire one approval-plan action at the host. Mirrors the AgentTeams plan
- * mutation fetch (`mutatePlan`): posts JSON, throws with the host's error
- * message (or an HTTP status) on any non-ok response.
+ * mutation fetch (`mutatePlan`): posts JSON and rejects with an
+ * `ApprovalPlanError` on any non-ok response. The host's own sentence stays on
+ * that error as `hostMessage`; what the UI renders is the mapped wording.
  *
  * `sessionId` is the session the card is rendered in, and it is REQUIRED: the
  * host route authenticates the browser as the human operator but still refuses
@@ -83,6 +124,10 @@ export type ApprovalLiveState = {
  * "pending" in the transcript forever. This is how the card learns otherwise.
  */
 export declare function fetchApprovalRequestState(requestId: string): Promise<ApprovalLiveState>;
-/** Normalize an unknown thrown value into a displayable message. */
-export declare function approvalErrorMessage(error: unknown): string;
+/**
+ * Normalize an unknown thrown value into wording the UI may show: a refusal
+ * renders through `t` when the caller has a translator, and everything else is
+ * scrubbed of host internals before it reaches a surface.
+ */
+export declare function approvalErrorMessage(error: unknown, t?: AgentTeamsTranslate): string;
 //# sourceMappingURL=sophia-approval-requests.d.ts.map

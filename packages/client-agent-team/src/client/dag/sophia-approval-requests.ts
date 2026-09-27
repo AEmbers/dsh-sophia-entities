@@ -6,6 +6,7 @@
  */
 
 import type { TeamMode } from 'dsh-sophia-entities/orchestration/types'
+import { zh, type AgentTeamsLocaleKey, type AgentTeamsTranslate } from './locales.ts'
 import { APPROVALS_STATE_URL } from './sophia-approval-badge.ts'
 
 /** POST body target for approval-plan actions (design §4.4.2 / routes.ts). */
@@ -44,6 +45,99 @@ export interface SophiaApprovalPlanResult {
   readonly teamRef?: string
 }
 
+/**
+ * Why the host refused a plan action. A known refusal answers 409 with
+ * `{error, code, state}`; the client renders its own wording for the `code` so
+ * the host's sentence — which names internal state names and request ids —
+ * never reaches the UI.
+ */
+export type ApprovalRefusalCode =
+  | 'not_awaiting_owner'
+  | 'not_awaiting_captain'
+  | 'captain_only'
+  | 'human_only'
+  | 'empty_plan'
+  | 'materialize_failed'
+
+/** Locale key that renders each known refusal. */
+export const APPROVAL_REFUSAL_KEYS: Readonly<Record<ApprovalRefusalCode, AgentTeamsLocaleKey>> = {
+  not_awaiting_owner: 'approval.error.notAwaitingOwner',
+  not_awaiting_captain: 'approval.error.notAwaitingCaptain',
+  captain_only: 'approval.error.captainOnly',
+  human_only: 'approval.error.humanOnly',
+  empty_plan: 'approval.error.emptyPlan',
+  materialize_failed: 'approval.error.materializeFailed',
+}
+
+/** Wording for a refusal the host gave no code for, and for anything raw. */
+export const APPROVAL_ERROR_GENERIC_KEY: AgentTeamsLocaleKey = 'approval.error.generic'
+
+const APPROVAL_REFUSAL_CODES: ReadonlySet<string> = new Set(Object.keys(APPROVAL_REFUSAL_KEYS))
+
+/** Narrow the host's `code` field to the refusals this build knows. */
+export function approvalRefusalCode(value: unknown): ApprovalRefusalCode | undefined {
+  return typeof value === 'string' && APPROVAL_REFUSAL_CODES.has(value)
+    ? value as ApprovalRefusalCode
+    : undefined
+}
+
+/**
+ * One refused plan action, carrying wording the UI is allowed to show.
+ *
+ * `message` is Simplified Chinese — the dictionary's source of truth — so a
+ * caller with no translator still renders a sentence rather than the host's
+ * own text; `messageKey` is what a localized surface renders instead. The
+ * host's raw sentence survives as `hostMessage` for logs only.
+ */
+export class ApprovalPlanError extends Error {
+  /** The refusal code, when the host named one this build knows. */
+  readonly code: ApprovalRefusalCode | undefined
+  /** The state the host reported for the request, when it reported one. */
+  readonly state: string | undefined
+  /** HTTP status of the refused response. */
+  readonly status: number
+  /** Locale key a translated surface renders. */
+  readonly messageKey: AgentTeamsLocaleKey
+  /** The host's own `error` string; diagnostics only, never the UI. */
+  readonly hostMessage: string | undefined
+
+  constructor(
+    status: number,
+    code: ApprovalRefusalCode | undefined,
+    state: string | undefined,
+    hostMessage: string | undefined,
+  ) {
+    const messageKey = code === undefined ? APPROVAL_ERROR_GENERIC_KEY : APPROVAL_REFUSAL_KEYS[code]
+    super(zh[messageKey])
+    this.name = 'ApprovalPlanError'
+    this.code = code
+    this.state = state
+    this.status = status
+    this.messageKey = messageKey
+    this.hostMessage = hostMessage
+  }
+}
+
+/** Sentences that name host internals instead of telling the user anything. */
+const UNSAFE_APPROVAL_TEXT: readonly RegExp[] = [
+  /is not awaiting/i,
+  /pending_(?:owner|captain)/i,
+  /\brequest\s+[0-9a-f]{4,}/i,
+  /\bHTTP\s*\d{3}\b/i,
+]
+
+/**
+ * Keep a string the UI may show. Anything that would leak a state name, a
+ * request id or a bare HTTP status becomes the generic wording instead.
+ */
+export function sanitizeApprovalMessage(message: string): string {
+  const text = message.trim()
+  if (text === '') return zh[APPROVAL_ERROR_GENERIC_KEY]
+  return UNSAFE_APPROVAL_TEXT.some((pattern) => pattern.test(text))
+    ? zh[APPROVAL_ERROR_GENERIC_KEY]
+    : text
+}
+
 /** Fold the host's snake_case result body into the card's result shape. */
 function parsePlanResult(body: unknown): SophiaApprovalPlanResult | undefined {
   if (typeof body !== 'object' || body === null) return undefined
@@ -65,8 +159,9 @@ function parsePlanResult(body: unknown): SophiaApprovalPlanResult | undefined {
 
 /**
  * Fire one approval-plan action at the host. Mirrors the AgentTeams plan
- * mutation fetch (`mutatePlan`): posts JSON, throws with the host's error
- * message (or an HTTP status) on any non-ok response.
+ * mutation fetch (`mutatePlan`): posts JSON and rejects with an
+ * `ApprovalPlanError` on any non-ok response. The host's own sentence stays on
+ * that error as `hostMessage`; what the UI renders is the mapped wording.
  *
  * `sessionId` is the session the card is rendered in, and it is REQUIRED: the
  * host route authenticates the browser as the human operator but still refuses
@@ -91,12 +186,16 @@ export async function postApprovalPlanAction(
     body: JSON.stringify({ ...payload, sessionId: owner }),
   })
   if (!response.ok) {
-    let message = `HTTP ${response.status}`
+    let hostMessage: string | undefined
+    let code: ApprovalRefusalCode | undefined
+    let state: string | undefined
     try {
-      const body = await response.json() as { error?: unknown }
-      if (typeof body.error === 'string' && body.error.trim() !== '') message = body.error
+      const body = await response.json() as { error?: unknown; code?: unknown; state?: unknown }
+      if (typeof body.error === 'string' && body.error.trim() !== '') hostMessage = body.error
+      code = approvalRefusalCode(body.code)
+      if (typeof body.state === 'string') state = body.state
     } catch {}
-    throw new Error(message)
+    throw new ApprovalPlanError(response.status, code, state, hostMessage)
   }
   try {
     return parsePlanResult(await response.json())
@@ -147,7 +246,14 @@ export async function fetchApprovalRequestState(requestId: string): Promise<Appr
   }
 }
 
-/** Normalize an unknown thrown value into a displayable message. */
-export function approvalErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+/**
+ * Normalize an unknown thrown value into wording the UI may show: a refusal
+ * renders through `t` when the caller has a translator, and everything else is
+ * scrubbed of host internals before it reaches a surface.
+ */
+export function approvalErrorMessage(error: unknown, t?: AgentTeamsTranslate): string {
+  if (error instanceof ApprovalPlanError) {
+    return t === undefined ? error.message : t(error.messageKey)
+  }
+  return sanitizeApprovalMessage(error instanceof Error ? error.message : String(error))
 }

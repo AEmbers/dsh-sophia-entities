@@ -72,6 +72,11 @@ export declare function installSophiaApprovalPlane(ctx: Context, options: Sophia
  * caller is the Human owner; the human session id rides in the request body
  * exactly like the halt route's `sessionId` and is rejected with 409 when it
  * is not attached. Registering is idempotent per web server via `ctx.effect`.
+ *
+ * Failure shape of the plan route (frozen): a refusal the approval plane can
+ * name is a 409 with `{ error, code, state? }`, where `error` is Chinese text
+ * keyed by `code` (`toApprovalHttpError`); an unknown failure is a 500 with a
+ * generic Chinese message and the raw error only in the log.
  */
 export declare function registerApprovalRoutes(ctx: Context, webServer: WebRouteHost, facade: SophiaTeamFacade, 
 /**

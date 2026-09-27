@@ -1,3 +1,4 @@
+import { type ApprovalErrorCode } from './errors.ts';
 import type { ApprovalPlan, ApprovalRequest, ApprovalState, CaptainVerdict, MaterializeResult, OwnerVerdict, Requester, TeamMode } from './types.ts';
 export declare const DEFAULT_TIMEOUTS: {
     readonly pendingCaptainMs: number;
@@ -38,7 +39,19 @@ export interface TransitionResult {
 /** Stores a transition outcome that failed AFTER the record changed. */
 export declare class MaterializeError extends Error {
     readonly request: ApprovalRequest;
-    constructor(message: string, request: ApprovalRequest);
+    /**
+     * The code the HTTP layer reports: the underlying cause's code when it has
+     * one (e.g. a backend `empty_plan`), else the generic `materialize_failed`.
+     */
+    readonly code: ApprovalErrorCode;
+    /**
+     * The state the record KEEPS when materialization fails — the pre-decision
+     * state, which is what the card must be told (§4.2: a failed materialization
+     * never burns the decision). `request.state` is the *would-be* state
+     * (`approved`), so it is deliberately not the source for the response.
+     */
+    readonly state: ApprovalState;
+    constructor(message: string, request: ApprovalRequest, code?: ApprovalErrorCode, state?: ApprovalState);
 }
 export declare class ApprovalRouter {
     private readonly workspace;
@@ -77,6 +90,13 @@ export declare class ApprovalRouter {
     /**
      * Apply the timeout table to every stored request. Returns the transitions
      * that happened. Safe to call repeatedly (idempotent per state).
+     *
+     * Hosts must call this REPEATEDLY, not once at startup: the expiry table is
+     * what moves a request out of `pending_captain` / `pending_owner`, so a queue
+     * served without a sweep keeps handing out rows that are already past their
+     * deadline (and no one is entitled to decide them any more). The plugin wires
+     * it on the approval-queue read path plus a background timer; a one-shot
+     * startup sweep would only postpone the same stale row.
      */
     sweepExpired(): Promise<TransitionResult[]>;
     /** Pure expiry transition for one request (exposed for tests). */

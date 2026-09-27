@@ -267,7 +267,7 @@ function OwnerApprovalCard({ data, sessionId, t }: { readonly data: SophiaApprov
       if (result?.state !== undefined) setOutcome(result.state)
       if (result?.mode !== undefined) setMode(result.mode)
     } catch (err) {
-      setError(approvalErrorMessage(err))
+      setError(approvalErrorMessage(err, t))
     } finally {
       setBusy(false)
     }
@@ -336,7 +336,7 @@ function CaptainReviewCard({ data, sessionId, t }: { readonly data: SophiaApprov
       const result = await postApprovalPlanAction(sessionId, { action: 'review', requestId: data.requestId, decision, reason })
       if (result?.state !== undefined) setOutcome(result.state)
     } catch (err) {
-      setError(approvalErrorMessage(err))
+      setError(approvalErrorMessage(err, t))
     } finally {
       setBusy(false)
     }
