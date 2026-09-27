@@ -56,6 +56,20 @@ const WORKSPACE_KEYS = ['workspaceRegistry', 'workspace'] as const
  */
 interface AgentTeamHostLike {
   memberForAgent(agent: Agent): { readonly handle: string } | undefined
+  /**
+   * Durable roster with handles/descriptions, when the host build exposes it.
+   * Optional: this package must install on a host that only offers the
+   * mutating surface, and the panel simply keeps its volume card there.
+   */
+  members?(): readonly {
+    readonly member: {
+      readonly memberId: string
+      readonly handle: string
+      readonly description: string
+      readonly state: string
+      readonly model?: { readonly model: string } | undefined
+    }
+  }[]
 }
 
 /**
@@ -574,6 +588,14 @@ function createLazyPersistentBackend(
     create: (facadeCtx, request) => resolveBackend().create(facadeCtx, request),
     describe: (facadeCtx, teamRef) => resolveBackend().describe(facadeCtx, teamRef),
     list: (facadeCtx) => resolveBackend().list(facadeCtx),
+    // Forwarded only when the inner backend implements it, so the panel's
+    // "no row detail" fallback stays honest for a host that cannot answer.
+    membersOf: (facadeCtx, teamRef) => {
+      const inner = resolveBackend()
+      return inner.membersOf === undefined
+        ? Promise.resolve(Object.freeze([]))
+        : inner.membersOf(facadeCtx, teamRef)
+    },
   }
 }
 

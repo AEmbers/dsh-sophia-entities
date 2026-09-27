@@ -198,7 +198,16 @@ export function apply(ctx, config) {
                         const workingRoot = roots.find(root => root.stateRoot === join(approvalHandle.workingDirectory, resolved.stateDir));
                         const workspaceLabel = workingRoot?.workspace ?? approvalHandle.workingDirectory;
                         for (const summary of persistent) {
-                            snapshots.push(persistentTeamSnapshot(workspaceLabel, summary));
+                            // Row detail is optional: a host without `members()` keeps the
+                            // volume card, so a failed read degrades instead of losing the team.
+                            let rows;
+                            try {
+                                rows = await approvalHandle.persistentBackend.membersOf?.(ctx, summary.teamId);
+                            }
+                            catch (error) {
+                                ctx.logger.warn(`agent-teams: persistent member rows failed: ${String(error)}`);
+                            }
+                            snapshots.push(persistentTeamSnapshot(workspaceLabel, summary, rows));
                         }
                     }
                     catch (error) {

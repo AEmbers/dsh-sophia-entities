@@ -103,5 +103,44 @@ export function createSophiaPersistentBackend(deps) {
             const view = deps.host.view({ workspaceId });
             return view.channels.map(channel => summary(channel, view.members.filter(membership => membership.channelRef === channel.channelRef).length, view.tasks.filter(task => task.channelRef === channel.channelRef).length));
         },
+        /**
+         * Per-row members of one Channel, so the activity panel can draw real rows
+         * (with OC artwork) instead of the two-number volume card.
+         *
+         * Two ledger projections have to be joined: `view.members` says WHO is in
+         * the channel (`{ channelRef, memberId }` only), and `host.members()` says
+         * what each of them is CALLED (`handle`, `description`, `state`). Neither
+         * alone is enough — that is exactly why the first-stage canary returned an
+         * empty array.
+         *
+         * `role` is filled from the member's `description`, which the backend writes
+         * from `planned.role` at materialization, so the planned role text survives
+         * verbatim and `memberArtUrl(name, role)` can still find the portrait. A
+         * host without the optional `members()` reader gets an empty list rather
+         * than fabricated rows.
+         */
+        async membersOf(_ctx, teamRef) {
+            if (deps.host.members === undefined)
+                return Object.freeze([]);
+            const slash = teamRef.lastIndexOf('/');
+            const resolvedWorkspace = slash === -1 ? workspaceId : teamRef.slice(0, slash);
+            const channelRef = (slash === -1 ? teamRef : teamRef.slice(slash + 1));
+            const view = deps.host.view({ workspaceId: resolvedWorkspace });
+            const inChannel = new Set(view.members
+                .filter(membership => membership.channelRef === channelRef)
+                .map(membership => membership.memberId));
+            if (inChannel.size === 0)
+                return Object.freeze([]);
+            const rows = deps.host.members()
+                .filter(status => inChannel.has(status.member.memberId))
+                .map(status => Object.freeze({
+                id: status.member.memberId,
+                name: status.member.handle,
+                role: status.member.description,
+                state: status.member.state,
+                ...(status.member.model === undefined ? {} : { model: status.member.model.model }),
+            }));
+            return Object.freeze(rows);
+        },
     });
 }

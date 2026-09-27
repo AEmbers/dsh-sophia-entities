@@ -461,6 +461,14 @@ function createLazyPersistentBackend(ctx, resolveRegistry, workingDirectory) {
         create: (facadeCtx, request) => resolveBackend().create(facadeCtx, request),
         describe: (facadeCtx, teamRef) => resolveBackend().describe(facadeCtx, teamRef),
         list: (facadeCtx) => resolveBackend().list(facadeCtx),
+        // Forwarded only when the inner backend implements it, so the panel's
+        // "no row detail" fallback stays honest for a host that cannot answer.
+        membersOf: (facadeCtx, teamRef) => {
+            const inner = resolveBackend();
+            return inner.membersOf === undefined
+                ? Promise.resolve(Object.freeze([]))
+                : inner.membersOf(facadeCtx, teamRef);
+        },
     };
 }
 function resolveWorkspaceId(registry, workingDirectory) {

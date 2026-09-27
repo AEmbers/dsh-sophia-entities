@@ -27,7 +27,7 @@
  * - Every create call uses deterministic requestIds derived from the approval
  *   request id, so un-awaited retries resolve idempotently inside the ledger.
  */
-import type { AgentTeamAgentMember, AgentTeamChannel, AgentTeamChannelRef, AgentTeamMemberId, AgentTeamRequestId } from './types/entities.ts'
+import type { AgentTeamAgentMember, AgentTeamAgentMemberStatus, AgentTeamChannel, AgentTeamChannelRef, AgentTeamMemberId, AgentTeamRequestId } from './types/entities.ts'
 import type {
   AgentTeamAddMemberRequest,
   AgentTeamAddMemberResult,
@@ -42,6 +42,7 @@ import type {
   ApprovalRequest,
   MaterializeResult,
   TeamBackend,
+  TeamMemberRow,
   TeamSummary,
 } from 'dsh-sophia-entities/orchestration'
 
@@ -65,6 +66,17 @@ export interface PersistentHostAPI {
   readonly sendMessage: (request: AgentTeamSendMessageRequest) => Promise<AgentTeamSendMessageResult>
   /** Synchronous Human-facing projection; used for reads only, never mutation. */
   readonly view: (request: AgentTeamViewRequest) => AgentTeamView
+  /**
+   * Durable Member rows across the workspace. Optional so a host build that
+   * only implements the mutating surface still runs — row rendering then falls
+   * back to the channel's `memberCount`.
+   *
+   * READ-ONLY, and the reason the panel can draw real member rows: a Channel
+   * membership fact carries ids only (`{ channelRef, memberId }`), so the
+   * display `handle` and `description` — the two strings the client matches OC
+   * artwork against — can only come from here.
+   */
+  readonly members?: () => readonly AgentTeamAgentMemberStatus[]
 }
 
 export interface SophiaPersistentBackendDeps {
@@ -196,6 +208,46 @@ export function createSophiaPersistentBackend(deps: SophiaPersistentBackendDeps)
         view.members.filter(membership => membership.channelRef === channel.channelRef).length,
         view.tasks.filter(task => task.channelRef === channel.channelRef).length,
       ))
+    },
+
+    /**
+     * Per-row members of one Channel, so the activity panel can draw real rows
+     * (with OC artwork) instead of the two-number volume card.
+     *
+     * Two ledger projections have to be joined: `view.members` says WHO is in
+     * the channel (`{ channelRef, memberId }` only), and `host.members()` says
+     * what each of them is CALLED (`handle`, `description`, `state`). Neither
+     * alone is enough — that is exactly why the first-stage canary returned an
+     * empty array.
+     *
+     * `role` is filled from the member's `description`, which the backend writes
+     * from `planned.role` at materialization, so the planned role text survives
+     * verbatim and `memberArtUrl(name, role)` can still find the portrait. A
+     * host without the optional `members()` reader gets an empty list rather
+     * than fabricated rows.
+     */
+    async membersOf(_ctx: unknown, teamRef: string): Promise<readonly TeamMemberRow[]> {
+      if (deps.host.members === undefined) return Object.freeze([])
+      const slash = teamRef.lastIndexOf('/')
+      const resolvedWorkspace = slash === -1 ? workspaceId : teamRef.slice(0, slash) as WorkspaceId
+      const channelRef = (slash === -1 ? teamRef : teamRef.slice(slash + 1)) as AgentTeamChannelRef
+      const view = deps.host.view({ workspaceId: resolvedWorkspace })
+      const inChannel = new Set(
+        view.members
+          .filter(membership => membership.channelRef === channelRef)
+          .map(membership => membership.memberId as string),
+      )
+      if (inChannel.size === 0) return Object.freeze([])
+      const rows = deps.host.members()
+        .filter(status => inChannel.has(status.member.memberId as string))
+        .map(status => Object.freeze({
+          id: status.member.memberId as string,
+          name: status.member.handle,
+          role: status.member.description,
+          state: status.member.state,
+          ...(status.member.model === undefined ? {} : { model: status.member.model.model }),
+        }))
+      return Object.freeze(rows)
     },
   })
 }

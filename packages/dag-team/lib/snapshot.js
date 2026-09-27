@@ -135,7 +135,7 @@ export async function assembleTeamSnapshot(ctx, stateRoot, workspace, state, opt
  * @param summary - the persistent `TeamSummary` from the ledger backend.
  * @returns the minimal persistent activity snapshot.
  */
-export function persistentTeamSnapshot(workspace, summary) {
+export function persistentTeamSnapshot(workspace, summary, rows) {
     return Object.freeze({
         workspace,
         teamId: summary.teamId,
@@ -143,7 +143,27 @@ export function persistentTeamSnapshot(workspace, summary) {
         captainSessionId: '',
         phase: 'running',
         mode: 'persistent',
-        members: Object.freeze([]),
+        // Ledger members carry no per-row activity (no progress, no current task,
+        // no unread counter) — the ledger simply does not record it. So a row is
+        // filled with the fields it CAN source and neutral values elsewhere, which
+        // lets the panel draw the member with its OC portrait instead of falling
+        // back to a volume card. Absent rows keep the original minimal snapshot.
+        members: Object.freeze((rows ?? []).map(row => Object.freeze({
+            id: row.id,
+            name: row.name,
+            role: row.role,
+            provider: '',
+            model: row.model ?? '',
+            reasoningEffort: '',
+            executionPrompt: '',
+            status: (row.state === 'inactive' || row.state === 'archived' ? 'removed' : 'idle'),
+            activity: 'unknown',
+            progress: 0,
+            done: 0,
+            total: 0,
+            currentTask: '',
+            unread: 0,
+        }))),
         tasks: Object.freeze([]),
         messageCount: 0,
         captainInbox: Object.freeze([]),
