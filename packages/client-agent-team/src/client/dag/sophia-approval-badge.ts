@@ -65,6 +65,35 @@ export function aggregateApprovalSnapshot(
   return { count, states: [...states].sort() }
 }
 
+/**
+ * Recover the rows that await the Human owner, in the order the host listed
+ * them. The badge only ever needed the count, but the activity panel renders
+ * one actionable row per waiting proposal — and it must read the same snapshot
+ * the badge polls rather than inventing a second source of truth.
+ */
+export function pendingApprovalRows(
+  body: { readonly requests?: unknown } | null | undefined,
+): readonly SophiaApprovalSnapshotRow[] {
+  if (body === null || body === undefined || !Array.isArray(body.requests)) return []
+  const rows: SophiaApprovalSnapshotRow[] = []
+  for (const row of body.requests) {
+    if (typeof row !== 'object' || row === null) continue
+    const entry = row as Partial<SophiaApprovalSnapshotRow>
+    if (typeof entry.id !== 'string' || entry.id === '') continue
+    if (typeof entry.state !== 'string' || !APPROVAL_BADGE_STATES.has(entry.state)) continue
+    rows.push({
+      id: entry.id,
+      goal: typeof entry.goal === 'string' ? entry.goal : '',
+      requester: typeof entry.requester === 'string' ? entry.requester : '',
+      ...(typeof entry.mode === 'string' ? { mode: entry.mode } : {}),
+      state: entry.state,
+      createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : 0,
+      ...(typeof entry.expiresAt === 'number' ? { expiresAt: entry.expiresAt } : {}),
+    })
+  }
+  return rows
+}
+
 /** Optional seams for pull an isolated vitest bench. */
 export interface ApprovalBadgeRuntime {
   fetchState?: (url: string, init?: RequestInit) => Promise<Response>
@@ -87,6 +116,7 @@ export interface ApprovalBadgeController {
 export function startApprovalBadgePolling(
   subscriber: (aggregate: SophiaApprovalAggregate) => void,
   runtime: ApprovalBadgeRuntime = {},
+  onRows?: (rows: readonly SophiaApprovalSnapshotRow[]) => void,
 ): ApprovalBadgeController {
   const fetchState = runtime.fetchState ?? ((url, init) => fetch(url, init))
   const schedule = runtime.schedule ?? ((callback, intervalMs) => setInterval(callback, intervalMs))
@@ -109,6 +139,7 @@ export function startApprovalBadgePolling(
       const body = (await response.json()) as { readonly requests?: unknown } | null | undefined
       if (cancelled) return
       subscriber(aggregateApprovalSnapshot(body))
+      onRows?.(pendingApprovalRows(body))
     } catch (error: unknown) {
       if ((error as { name?: unknown })?.name === 'AbortError') return
       // Host restarting; keep the last snapshot and retry on the next tick.

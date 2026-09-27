@@ -1331,6 +1331,78 @@
   line-height: 16px;
 }
 
+/* Pending proposals awaiting the Human owner. Rendered above the team list so
+ * the one always-mounted approval surface leads with what needs a decision. */
+.approvals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 10px 10px;
+}
+
+.approvalRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 34%, var(--dsw-alias-border-l2));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-module-platform) 93%, var(--dsw-alias-state-business-primary));
+}
+
+.approvalGoal {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.approvalMeta {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.approvalError {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.approvalActions {
+  display: flex;
+  gap: 8px;
+}
+
+.approvalApprove,
+.approvalReject {
+  padding: 4px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  corner-shape: round;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.approvalApprove {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 16%, transparent);
+}
+
+.approvalApprove:hover:not(:disabled),
+.approvalReject:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+}
+
+.approvalApprove:disabled,
+.approvalReject:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .planEditor {
   display: flex;
   flex-direction: column;

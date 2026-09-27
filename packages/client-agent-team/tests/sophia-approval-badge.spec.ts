@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   aggregateApprovalSnapshot,
+  pendingApprovalRows,
   startApprovalBadgePolling,
   APPROVAL_BADGE_STATES,
   type SophiaApprovalAggregate,
@@ -40,6 +41,40 @@ describe('aggregateApprovalSnapshot', () => {
     expect(APPROVAL_BADGE_STATES.has('pending_owner')).toBe(true)
     expect(APPROVAL_BADGE_STATES.has('pending_captain')).toBe(true)
     expect(APPROVAL_BADGE_STATES.has('draft')).toBe(false)
+  })
+})
+
+describe('pendingApprovalRows', () => {
+  const row = (overrides: Record<string, unknown> = {}): object => ({
+    id: 'req-1', goal: 'Ship the release', requester: 'human', mode: 'persistent',
+    state: 'pending_owner', createdAt: 7, ...overrides,
+  })
+
+  it('returns one renderable row per waiting proposal, in host order', () => {
+    expect(pendingApprovalRows({ requests: [row({ id: 'a' }), row({ id: 'b', state: 'pending_captain' })] }))
+      .toEqual([
+        { id: 'a', goal: 'Ship the release', requester: 'human', mode: 'persistent', state: 'pending_owner', createdAt: 7 },
+        { id: 'b', goal: 'Ship the release', requester: 'human', mode: 'persistent', state: 'pending_captain', createdAt: 7 },
+      ])
+  })
+
+  it('drops settled and unidentifiable rows instead of rendering a dead button', () => {
+    expect(pendingApprovalRows({ requests: [row({ state: 'approved' }), row({ state: 'rejected' }), row({ state: 'draft' }), row({ id: '' }), 42] }))
+      .toEqual([])
+  })
+
+  it('tolerates a malformed or absent body', () => {
+    expect(pendingApprovalRows(null)).toEqual([])
+    expect(pendingApprovalRows(undefined)).toEqual([])
+    expect(pendingApprovalRows({})).toEqual([])
+    expect(pendingApprovalRows({ requests: 'nope' })).toEqual([])
+  })
+
+  it('leaves optional fields off rather than inventing them', () => {
+    const [only] = pendingApprovalRows({ requests: [row({ mode: undefined, expiresAt: undefined, createdAt: undefined, goal: undefined })] })
+    expect(only).toEqual({ id: 'req-1', goal: '', requester: 'human', state: 'pending_owner', createdAt: 0 })
+    expect('mode' in only!).toBe(false)
+    expect('expiresAt' in only!).toBe(false)
   })
 })
 

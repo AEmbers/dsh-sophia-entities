@@ -41,7 +41,37 @@ export function aggregateApprovalSnapshot(body) {
     }
     return { count, states: [...states].sort() };
 }
-export function startApprovalBadgePolling(subscriber, runtime = {}) {
+/**
+ * Recover the rows that await the Human owner, in the order the host listed
+ * them. The badge only ever needed the count, but the activity panel renders
+ * one actionable row per waiting proposal — and it must read the same snapshot
+ * the badge polls rather than inventing a second source of truth.
+ */
+export function pendingApprovalRows(body) {
+    if (body === null || body === undefined || !Array.isArray(body.requests))
+        return [];
+    const rows = [];
+    for (const row of body.requests) {
+        if (typeof row !== 'object' || row === null)
+            continue;
+        const entry = row;
+        if (typeof entry.id !== 'string' || entry.id === '')
+            continue;
+        if (typeof entry.state !== 'string' || !APPROVAL_BADGE_STATES.has(entry.state))
+            continue;
+        rows.push({
+            id: entry.id,
+            goal: typeof entry.goal === 'string' ? entry.goal : '',
+            requester: typeof entry.requester === 'string' ? entry.requester : '',
+            ...(typeof entry.mode === 'string' ? { mode: entry.mode } : {}),
+            state: entry.state,
+            createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : 0,
+            ...(typeof entry.expiresAt === 'number' ? { expiresAt: entry.expiresAt } : {}),
+        });
+    }
+    return rows;
+}
+export function startApprovalBadgePolling(subscriber, runtime = {}, onRows) {
     const fetchState = runtime.fetchState ?? ((url, init) => fetch(url, init));
     const schedule = runtime.schedule ?? ((callback, intervalMs) => setInterval(callback, intervalMs));
     const cancel = runtime.cancel ?? ((timer) => { clearInterval(timer); });
@@ -67,6 +97,7 @@ export function startApprovalBadgePolling(subscriber, runtime = {}) {
             if (cancelled)
                 return;
             subscriber(aggregateApprovalSnapshot(body));
+            onRows?.(pendingApprovalRows(body));
         }
         catch (error) {
             if (error?.name === 'AbortError')
