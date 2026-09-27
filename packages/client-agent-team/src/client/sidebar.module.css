@@ -472,6 +472,21 @@
   position: relative;
   width: 24px;
 }
+.agentAvatar[data-has-art='true'] {
+  background: transparent;
+  border-radius: 0;
+}
+.agentArt {
+  border: 0;
+  border-radius: 0;
+  display: block;
+  flex: none;
+  filter: drop-shadow(0 1px 1px rgb(18 45 72 / 18%));
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+  width: 24px;
+}
 /* Presence badge rides the avatar's bottom-right edge; the ring matches the
    sidebar fill so the dot reads as one glyph instead of a floating dot. */
 .agentAvatarBadge {
