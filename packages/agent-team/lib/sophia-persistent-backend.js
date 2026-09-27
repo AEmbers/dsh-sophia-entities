@@ -1,5 +1,38 @@
 /** Display-name budget for the materialized Channel (board: goal truncated to ~80 chars). */
 const CHANNEL_NAME_MAX = 80;
+/**
+ * The host's own roster cap, which it enforces with
+ * `Team member limit ${maxMembers} reached` (code `TEAM_MEMBER_LIMIT`,
+ * `@deepseek-ai/dsh-experimental-agent-team`). The cap is a CONSTRUCTOR
+ * argument there, so it is not readable from the service — the only signal we
+ * ever get is this throw, at whatever member index happened to cross it.
+ */
+const HOST_MEMBER_LIMIT = /Team member limit (\d+) reached/;
+/**
+ * Turn the host's bare roster-cap rejection into something the owner can act on.
+ *
+ * The host counts only AI members, so the Human owner is not part of the
+ * number, and its message names neither the plan size nor which knob to turn.
+ * Since a 20-post organisation (the 钦天监 tree) is well past the shipped
+ * default of 8, this is the difference between 「改哪里？」 and a clear fix.
+ * @param error - whatever `addMember` threw.
+ * @param planned - how many members the approved plan asked for.
+ * @param index - the zero-based index that failed.
+ * @param handle - the member name that failed.
+ * @returns the original error when it is not the roster cap, else a wrapped one.
+ */
+function memberLimitError(error, planned, index, handle) {
+    const match = HOST_MEMBER_LIMIT.exec(error instanceof Error ? error.message : String(error));
+    if (match === null)
+        return error;
+    const cap = match[1] ?? '?';
+    return new Error(`这次计划的 ${planned} 名成员超出了宿主 agent-team 插件的成员上限（${cap}）：`
+        + `第 ${index + 1} 名「${handle}」被拒绝。`
+        + `宿主只统计 AI 成员，主人本人不计入。`
+        + `请在自己的 profile 里把上限调高后再批准，例如在 cordis.patch.yml 加：\n`
+        + `- id: agent-team\n  name: "@deepseek-ai/dsh-experimental-agent-team"\n`
+        + `  config:\n    maxMembers: ${planned}`);
+}
 /** Truncate by code points so surrogate pairs (emoji) are never split. */
 function truncateText(text, max) {
     const points = [...text];
@@ -54,15 +87,21 @@ export function createSophiaPersistentBackend(deps) {
                         model: planned.model,
                         ...(planned.reasoningEffort === undefined ? {} : { reasoningEffort: planned.reasoningEffort }),
                     });
-                const memberResult = await deps.host.addMember({
-                    requestId: requestId(`persistent:member:${request.id}:${index}`),
-                    workspaceId,
-                    handle: planned.name,
-                    description: planned.role ?? '',
-                    presetId: 'team-member',
-                    ...(model === undefined ? {} : { model }),
-                    channelRefs: Object.freeze([channel.channelRef]),
-                });
+                let memberResult;
+                try {
+                    memberResult = await deps.host.addMember({
+                        requestId: requestId(`persistent:member:${request.id}:${index}`),
+                        workspaceId,
+                        handle: planned.name,
+                        description: planned.role ?? '',
+                        presetId: 'team-member',
+                        ...(model === undefined ? {} : { model }),
+                        channelRefs: Object.freeze([channel.channelRef]),
+                    });
+                }
+                catch (error) {
+                    throw memberLimitError(error, request.plan.members.length, index, planned.name);
+                }
                 const stored = memberResult.status.member;
                 memberIdByHandle.set(stored.handle, stored.memberId);
             }

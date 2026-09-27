@@ -42,6 +42,17 @@ export interface Config {
     memberMaxDepth?: number;
     /** Team size cap in members (default `8`). */
     maxMembers?: number;
+    /**
+     * Intended size of the standing organisation, in members (default: same as
+     * `maxMembers`).
+     *
+     * This is the number the owner actually wants staffed — the 钦天监 org tree
+     * implies 20 AI posts, with the Human owner NOT counted among them. It is
+     * checked against the hosting `agent-team` plugin's own `maxMembers` before a
+     * proposal is filed, so an oversized roster reports which two numbers
+     * disagree instead of failing inside the host with a bare rejection.
+     */
+    teamSize?: number;
     /** Named multi-role team profiles. */
     profiles?: Record<string, TeamProfileConfig>;
     /** Prompt-section order for the usage policy (default `117`, after delegation policy). */

@@ -83,6 +83,18 @@ export const Config = z.object({
     })).default({}),
     memberMaxDepth: z.natural().default(0),
     maxMembers: z.natural().min(1).default(8),
+    /**
+     * How many members the owner wants the standing organisation to hold.
+     *
+     * Distinct from `maxMembers`, which is the hard cap on what this plugin will
+     * ever accept. `teamSize` is the intended size — the roster the 钦天监 org
+     * tree implies (20 posts) — and it is what gets checked against the HOST's
+     * own cap before a proposal is filed, so an oversized plan fails with an
+     * actionable message instead of a bare host rejection.
+     *
+     * Defaults to `maxMembers` so existing installations behave as before.
+     */
+    teamSize: z.natural().min(1).default(8),
     promptSectionOrder: z.natural().default(117),
     slashCommand: z.boolean().default(true),
 });
@@ -110,6 +122,7 @@ export function apply(ctx, config) {
         fallback: config.fallback,
         memberMaxDepth: config.memberMaxDepth ?? 0,
         maxMembers: config.maxMembers ?? 8,
+        teamSize: config.teamSize ?? config.maxMembers ?? 8,
         profiles: config.profiles ?? {},
     };
     // Provider registration is a sibling plugin's effect (`subagent-spawn` /
