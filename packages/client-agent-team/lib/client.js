@@ -7610,6 +7610,112 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			}) });
 		}
 		//#endregion
+		//#region src/client/dag/artwork.ts
+		/**
+		* Shared artwork lookup for the activity panel and the conversation card:
+		* OC (original character) portraits per member role resolve first — by post
+		* title, then by a plainer role word — the legacy whale role images act as a
+		* fallback bucket, and the captain uses the OC lead.
+		* @module dsh-agent-teams/client/artwork
+		*/
+		/** Legacy whale artwork route prefix served by the plugin host half. */
+		const ART_BASE = "/plugins/dsh-sophia-entities/assets/";
+		/** OC portrait route prefix (512x512 WebP, flat slug directory). */
+		const OC_ART_BASE = "/plugins/dsh-sophia-entities/sophia-assets/";
+		/** V2 whale role artwork per role keyword (fallback buckets). */
+		const ROLE_ART = [
+			[/data|analys|metric|performance|数据|分析|指标|性能/, "member-data-v2.png"],
+			[/resear|investig|explor|study|研究|调查|探索|调研/, "member-researcher-v2.png"],
+			[/\bqa\b|test|verif|quality|测试|质量|验证/, "member-qa-v2.png"],
+			[/engineer|dev\b|server|backend|\bapi\b|runtime|watcher|contract|工程|后端|服务|接口|开发|代码|编程/, "member-engineer-v2.png"],
+			[/design|\bui\b|\bux\b|front|theme|accessib|设计|前端|主题|无障碍/, "member-designer-v2.png"],
+			[/secur|audit|risk|threat|review|安全|审计|审查|风险/, "member-security-v2.png"],
+			[/docs|writer|product|spec|撰写|文案|写作|文档|规范/, "member-docs-v2.png"],
+			[/release|\bbuild\b|deploy|\bops\b|\bci\b|ship|coordin|发布|构建|部署|运维|协调/, "member-operator-v2.png"]
+		];
+		/**
+		* OC (original character) portraits, one per of the 20 member posts. The
+		* Chinese post names and the modern English post labels both match, so the
+		* roster text resolves deterministically instead of falling through regex
+		* buckets. Source of truth for the post -> slug mapping:
+		* docs/material-integration.md §4.
+		*
+		* 钦天监 is the organisation (Agent Teams itself); every name here is a post
+		* inside it, the captain's post being 监正. The historical spelling
+		* 钦天监监正 stays in the lead pattern as an alias.
+		*/
+		const OC_ROLE_ART = [
+			[/\bceo\b|总负责|队长|监正|钦天监监正/, "lead-ceo.webp"],
+			[/\bproduct\s*director\b|产品总监|灵台主事/, "product-director.webp"],
+			[/\bprogram\s*director\b|项目总监|时宪主事/, "program-director.webp"],
+			[/\bresource\s*admin\b|资源|行政|典籍掌事/, "resource-admin.webp"],
+			[/\brisk\b|compliance|风控|合规|星禁掌察/, "risk-compliance.webp"],
+			[/\breq(?:uirement)?\s*analyst\b|需求分析|观象访事/, "requirement-analyst.webp"],
+			[/\bproduct\s*manager\b|产品经理|星图主事/, "product-manager.webp"],
+			[/\bux\b|交互|用户体?验|象绘主事/, "ux-designer.webp"],
+			[/\bui\b|视觉|界面|星绘主事/, "ui-designer.webp"],
+			[/\bclient\s*success\b|客户|对接|传报主事/, "client-success.webp"],
+			[/\barchitect\b|架构|灵台郎/, "architect.webp"],
+			[/\bbackend\b|后端|历算主事/, "backend-engineer.webp"],
+			[/\bfrontend\b|前端|星仪主事/, "frontend-engineer.webp"],
+			[/\bdata\s*engineer\b|数据工程|数象主事/, "data-engineer.webp"],
+			[/\balgorithm\b|算法|推步主事/, "algorithm-engineer.webp"],
+			[/\bbusiness\s*qa\b|业务.?qa|星验主事/, "business-qa.webp"],
+			[/\btest(?:ing)?\s*engineer\b|测试工程师|星机校验/, "test-engineer.webp"],
+			[/\bops\b|运维|值守|天象值守/, "ops-engineer.webp"],
+			[/\bcode\s*review\w*\b|代码评审|审校|星文审校/, "code-reviewer.webp"],
+			[/\bdocs\s*writer\b|文档撰写|录典主事/, "docs-writer.webp"]
+		];
+		/**
+		* Ordinary role words that name one of the same twenty posts in plainer English
+		* than the post titles do. Checked AFTER the posts, so a post title always wins,
+		* and BEFORE the whale buckets, so a member whose role is simply "reviewer" or
+		* "verifier" wears that post's OC portrait instead of a generic whale. Only
+		* unambiguous words are listed: "analyst" is a requirement analyst, but
+		* "engineer" alone is not a post, so it stays in the whale tier.
+		*/
+		const OC_ALIAS_ART = [
+			[/\bchief\b|\bcaptain\b|\blead\b|\bhead\b|队长|总负责/, "lead-ceo.webp"],
+			[/\bpm\b|\bowner\b|\bmanager\b|产品经理|经理/, "product-manager.webp"],
+			[/\btpm\b|\bcoordinator\b|项目经理|协调/, "program-director.webp"],
+			[/\badmin\w*|行政|资源/, "resource-admin.webp"],
+			[/\bsecurity\b|\baudit\w*|\bthreat\b|合规|风控|安全|审计/, "risk-compliance.webp"],
+			[/\bresearch\w*|\binvestigat\w*|\banalyst\b|\banalys\w*|研究|调研|调查|分析/, "requirement-analyst.webp"],
+			[/\bdesign\w*|设计|视觉|交互/, "ui-designer.webp"],
+			[/\bsuccess\b|\bsupport\b|\bsales\b|客户|支持|对接/, "client-success.webp"],
+			[/\barchitect\w*|架构/, "architect.webp"],
+			[/\bdeveloper\b|\bprogrammer\b|\bcoder\b|\bserver\b|\bbackend\b|开发|后端/, "backend-engineer.webp"],
+			[/\bfrontend\b|\bfront-end\b|\bweb\b|前端/, "frontend-engineer.webp"],
+			[/\bdata\b|数据/, "data-engineer.webp"],
+			[/\balgorithm\w*|算法/, "algorithm-engineer.webp"],
+			[/\bqa\b|\bverif\w*|\btest\w*|\bquality\b|测试|验证|校验/, "test-engineer.webp"],
+			[/\breview\w*|评审|审校/, "code-reviewer.webp"],
+			[/\bdevops\b|\bsre\b|\bops\b|\brelease\b|\bdeploy\w*|运维|部署|发布/, "ops-engineer.webp"],
+			[/\bwriter\b|\bdocs?\b|\bdocument\w*|文档|撰写/, "docs-writer.webp"]
+		];
+		/** Captain artwork: the OC lead portrait (监正 · lead-ceo). */
+		const LEAD_ART = `${OC_ART_BASE}lead-ceo.webp`;
+		/** Status action artwork per member activity (kept on whale images). */
+		const ACTION_ART = {
+			working: `${ART_BASE}action-working-v2.png`,
+			idle: `${ART_BASE}action-sleeping-v2.png`,
+			unknown: `${ART_BASE}action-thinking-v2.png`
+		};
+		/**
+		* Member artwork URL, or null when no role matches (initial-letter fallback).
+		* The OC portraits win first — the exact post title, then a plainer role word —
+		* and the legacy whale buckets only catch what is left.
+		* @param name - the member's display name.
+		* @param role - the member's role text.
+		* @returns the artwork URL, or null when unmatched.
+		*/
+		function memberArtUrl(name, role) {
+			const identity = `${name} ${role}`.toLowerCase();
+			for (const table of [OC_ROLE_ART, OC_ALIAS_ART]) for (const [pattern, art] of table) if (pattern.test(identity)) return `${OC_ART_BASE}${art}`;
+			for (const [pattern, art] of ROLE_ART) if (pattern.test(identity)) return `${ART_BASE}${art}`;
+			return null;
+		}
+		//#endregion
 		//#region ../agent-team/src/mentions.ts
 		function escapeRegExp(value) {
 			return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -8146,7 +8252,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		}
 		//#endregion
 		//#region \0dsh-css:packages/client-agent-team/src/client/sidebar.module.css.mjs
-		const css$14 = "html[data-agent-team-mode=team] button[class*=newSession]{display:none}html[data-agent-team-mode=team] nav[class*=panelList]{display:none}.WKeuLa_workspaceBrowser{flex-direction:column;height:100%;min-height:0;padding:0 8px 8px;display:flex}.WKeuLa_railButton{color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;justify-content:center;align-items:center;padding:0;display:inline-flex}.WKeuLa_railButton:hover,.WKeuLa_railButton:focus-visible{--team-mark-ring:var(--dsw-alias-interactive-bg-hover);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_railButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_workspaceTrigger{background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;text-align:left;border-radius:12px;align-items:center;gap:6px;width:100%;min-height:34px;margin:0 0 2px;padding:4px 8px;font-size:14px;line-height:22px;display:flex}.WKeuLa_workspaceTrigger:hover,.WKeuLa_workspaceTrigger[aria-current=page]{background:var(--dsw-alias-interactive-bg-hover)}.WKeuLa_workspaceTrigger:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_workspaceIcon{color:var(--dsw-alias-state-business-primary);flex:0 0 16px;justify-content:center;align-items:center;height:20px;display:inline-flex}.WKeuLa_workspaceValue{text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;overflow:hidden}.WKeuLa_workspaceChevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .12s;display:inline-flex}.WKeuLa_workspaceChevronOpen{transform:rotate(180deg)}@media (prefers-reduced-motion:reduce){.WKeuLa_workspaceChevron{transition:none}}.WKeuLa_emptyState{color:var(--dsw-alias-label-tertiary);margin:8px;font-size:12px;line-height:18px}.WKeuLa_inboxCard{color:var(--dsw-alias-label-primary);cursor:pointer;text-align:left;background:0 0;border:0;border-radius:12px;flex:none;align-items:center;gap:6px;width:100%;height:34px;margin:4px 0 2px;padding:0 8px;display:flex}.WKeuLa_inboxCard:hover,.WKeuLa_inboxCard:focus-visible,.WKeuLa_inboxCard[aria-current=page]{--team-mark-ring:var(--dsw-alias-interactive-bg-hover);background:var(--dsw-alias-interactive-bg-hover)}.WKeuLa_inboxCard:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_inboxCard .WKeuLa_inboxMark{color:var(--dsw-alias-label-tertiary)}.WKeuLa_inboxCardLabel{text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14px;line-height:20px;overflow:hidden}.WKeuLa_inboxMark{flex:0 0 16px;display:inline-flex;position:relative}.WKeuLa_inboxDot{background:var(--dsw-alias-state-business-primary);box-shadow:0 0 0 2px var(--team-mark-ring,var(--dsw-specific-sidebar-fill)), 0 0 0 2px var(--dsw-specific-sidebar-fill);corner-shape:round;border-radius:50%;width:8px;height:8px;position:absolute;top:-2px;left:-2px}.WKeuLa_railWorkspace{flex-direction:column;align-items:center;gap:8px;padding-top:8px;display:flex}.WKeuLa_railButton{corner-shape:round;border-radius:50%;width:36px;height:36px;position:relative}.WKeuLa_railButton[aria-current=page]{--team-mark-ring:var(--dsw-alias-interactive-bg-hover);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_workspaceSection{flex-direction:column;flex:1;gap:4px;min-height:0;margin-top:2px;display:flex;overflow-y:auto}.WKeuLa_section{flex-direction:column;display:flex}.WKeuLa_sectionHeader{align-items:center;min-height:26px;padding-right:2px;display:flex}.WKeuLa_sectionToggle{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:4px;align-items:center;gap:4px;min-width:0;min-height:24px;padding:0 6px;font-size:12px;line-height:18px;display:inline-flex}.WKeuLa_sectionToggle:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_sectionToggle:hover .WKeuLa_sectionChevron,.WKeuLa_sectionToggle:focus-visible .WKeuLa_sectionChevron{color:var(--dsw-alias-label-primary)}.WKeuLa_sectionChevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .12s,color .12s}.WKeuLa_sectionToggle[aria-expanded=false] .WKeuLa_sectionChevron{transform:rotate(-90deg)}.WKeuLa_sectionTitle{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.WKeuLa_sectionActions{align-items:center;margin-left:auto;display:inline-flex}.WKeuLa_panel{flex-direction:column;display:flex}.WKeuLa_iconButton{corner-shape:round;color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;border-radius:50%;justify-content:center;align-items:center;width:24px;height:24px;padding:0;display:inline-flex}.WKeuLa_iconButton:hover,.WKeuLa_iconButton:focus-visible{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_iconButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_textButton{color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;border-radius:5px;padding:2px 5px;font-size:11px;line-height:18px}.WKeuLa_textButton:hover,.WKeuLa_textButton:focus-visible{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_textButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_textButton:disabled{cursor:not-allowed;opacity:.4}.WKeuLa_channelList,.WKeuLa_agentList{flex-direction:column;gap:1px;padding:0 4px 4px;display:flex}.WKeuLa_sidebarRowDragging{opacity:.5}.WKeuLa_sidebarRowDropBefore,.WKeuLa_sidebarRowDropAfter{position:relative}.WKeuLa_sidebarRowDropBefore:before,.WKeuLa_sidebarRowDropAfter:after{content:\"\";z-index:1;background:linear-gradient(55deg, transparent calc(50% - 1px), var(--dsw-alias-state-business-primary) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) 0 0 / 5px 7px no-repeat, linear-gradient(125deg, transparent calc(50% - 1px), var(--dsw-alias-state-business-primary) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) 0 5px / 5px 7px no-repeat, linear-gradient(var(--dsw-alias-state-business-primary) 0 0) 4px 5px / calc(100% - 4px) 2px no-repeat;pointer-events:none;height:12px;position:absolute;left:0;right:4px}.WKeuLa_sidebarRowDropBefore:before{top:-7px}.WKeuLa_sidebarRowDropAfter:after{bottom:-7px}.WKeuLa_channelRow{color:var(--dsw-alias-label-primary);border-radius:12px;align-items:center;min-height:30px;display:flex;position:relative}.WKeuLa_channelSelect{box-sizing:border-box;color:inherit;cursor:pointer;text-align:left;background:0 0;border:0;border-radius:12px;flex:1;align-items:center;min-width:0;min-height:30px;padding:3px 4px 3px 8px;display:flex}.WKeuLa_channelSelect:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_channelName{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:18px;overflow:hidden}.WKeuLa_agentRow{color:var(--dsw-alias-label-primary);border-radius:12px;align-items:center;min-height:38px;display:flex;position:relative}.WKeuLa_agentSelect{box-sizing:border-box;color:inherit;cursor:pointer;text-align:left;background:0 0;border:0;border-radius:12px;flex:1;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:0 8px;min-width:0;min-height:38px;padding:3px 4px 3px 8px;display:grid}.WKeuLa_agentSelect:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_agentSelect[aria-current=page]{background:var(--dsw-alias-interactive-bg-hover);border-radius:12px}.WKeuLa_agentRow:hover .WKeuLa_agentSelect[aria-current=page],.WKeuLa_agentRow:focus-within .WKeuLa_agentSelect[aria-current=page],.WKeuLa_agentRow[data-menu-open] .WKeuLa_agentSelect[aria-current=page]{background:0 0}.WKeuLa_agentAvatar{background:hsl(var(--team-avatar-hue,212) 42% 46%);corner-shape:round;color:#fff;cursor:default;border-radius:50%;flex:0 0 24px;justify-content:center;align-items:center;width:24px;height:24px;font-size:11px;font-weight:600;display:inline-flex;position:relative}.WKeuLa_agentAvatarBadge{background:var(--dsw-specific-sidebar-fill);corner-shape:round;box-shadow:0 0 0 1px var(--dsw-specific-sidebar-fill);border-radius:50%;justify-content:center;align-items:center;width:12px;height:12px;padding:1px;line-height:0;display:inline-flex;position:absolute;bottom:-3px;right:-3px}.WKeuLa_agentCopy{flex-direction:column;justify-content:flex-start;min-width:0;display:flex}.WKeuLa_agentCopy strong{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:17px;overflow:hidden}.WKeuLa_agentCopy small{color:var(--dsw-alias-label-tertiary);text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:13px;overflow:hidden}.WKeuLa_unavailableDot{background:var(--dsw-alias-label-tertiary);corner-shape:round;border-radius:50%;width:7px;height:7px;display:inline-block}.WKeuLa_rowMenu{flex:none;align-items:center;padding-right:4px;display:none}.WKeuLa_channelRow:hover .WKeuLa_rowMenu,.WKeuLa_channelRow:focus-within .WKeuLa_rowMenu,.WKeuLa_channelRow[data-menu-open] .WKeuLa_rowMenu,.WKeuLa_agentRow:hover .WKeuLa_rowMenu,.WKeuLa_agentRow:focus-within .WKeuLa_rowMenu,.WKeuLa_agentRow[data-menu-open] .WKeuLa_rowMenu{display:inline-flex}.WKeuLa_channelRow[data-menu-open],.WKeuLa_agentRow[data-menu-open],.WKeuLa_channelRow:hover,.WKeuLa_agentRow:hover,.WKeuLa_channelRow:focus-within,.WKeuLa_agentRow:focus-within,.WKeuLa_channelRow[aria-current=page]{background:var(--dsw-alias-interactive-bg-hover)}.WKeuLa_rowMenuButton{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:4px;justify-content:center;align-items:center;width:20px;height:20px;padding:0;display:inline-flex}.WKeuLa_rowMenuButton:hover,.WKeuLa_rowMenuButton:focus-visible{color:var(--dsw-alias-label-primary)}.WKeuLa_rowMenuButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_retryError{color:var(--dsw-alias-state-error-primary);justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;font-size:11px;display:flex}.WKeuLa_rowAlert{color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;padding:2px 8px 6px;font-size:11px}.WKeuLa_error{color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;margin:0;padding:4px 12px 6px;font-size:11px;line-height:16px}.WKeuLa_editDescription{color:var(--dsw-alias-label-secondary);margin:0 0 10px;font-size:12px;line-height:18px}.WKeuLa_editMemberList{gap:2px;display:grid}.WKeuLa_editChannelName{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:18px;overflow:hidden}.WKeuLa_editHint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:16px}.WKeuLa_menuHint{color:var(--dsw-alias-label-tertiary);margin-left:4px;font-size:10px;line-height:14px}.WKeuLa_rowError{color:var(--dsw-alias-state-error-primary);grid-column:1/-1;margin:2px 0;font-size:11px;line-height:16px}";
+		const css$14 = "html[data-agent-team-mode=team] button[class*=newSession]{display:none}html[data-agent-team-mode=team] nav[class*=panelList]{display:none}.WKeuLa_workspaceBrowser{flex-direction:column;height:100%;min-height:0;padding:0 8px 8px;display:flex}.WKeuLa_railButton{color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;justify-content:center;align-items:center;padding:0;display:inline-flex}.WKeuLa_railButton:hover,.WKeuLa_railButton:focus-visible{--team-mark-ring:var(--dsw-alias-interactive-bg-hover);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_railButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_workspaceTrigger{background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;text-align:left;border-radius:12px;align-items:center;gap:6px;width:100%;min-height:34px;margin:0 0 2px;padding:4px 8px;font-size:14px;line-height:22px;display:flex}.WKeuLa_workspaceTrigger:hover,.WKeuLa_workspaceTrigger[aria-current=page]{background:var(--dsw-alias-interactive-bg-hover)}.WKeuLa_workspaceTrigger:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_workspaceIcon{color:var(--dsw-alias-state-business-primary);flex:0 0 16px;justify-content:center;align-items:center;height:20px;display:inline-flex}.WKeuLa_workspaceValue{text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;overflow:hidden}.WKeuLa_workspaceChevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .12s;display:inline-flex}.WKeuLa_workspaceChevronOpen{transform:rotate(180deg)}@media (prefers-reduced-motion:reduce){.WKeuLa_workspaceChevron{transition:none}}.WKeuLa_emptyState{color:var(--dsw-alias-label-tertiary);margin:8px;font-size:12px;line-height:18px}.WKeuLa_inboxCard{color:var(--dsw-alias-label-primary);cursor:pointer;text-align:left;background:0 0;border:0;border-radius:12px;flex:none;align-items:center;gap:6px;width:100%;height:34px;margin:4px 0 2px;padding:0 8px;display:flex}.WKeuLa_inboxCard:hover,.WKeuLa_inboxCard:focus-visible,.WKeuLa_inboxCard[aria-current=page]{--team-mark-ring:var(--dsw-alias-interactive-bg-hover);background:var(--dsw-alias-interactive-bg-hover)}.WKeuLa_inboxCard:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_inboxCard .WKeuLa_inboxMark{color:var(--dsw-alias-label-tertiary)}.WKeuLa_inboxCardLabel{text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:14px;line-height:20px;overflow:hidden}.WKeuLa_inboxMark{flex:0 0 16px;display:inline-flex;position:relative}.WKeuLa_inboxDot{background:var(--dsw-alias-state-business-primary);box-shadow:0 0 0 2px var(--team-mark-ring,var(--dsw-specific-sidebar-fill)), 0 0 0 2px var(--dsw-specific-sidebar-fill);corner-shape:round;border-radius:50%;width:8px;height:8px;position:absolute;top:-2px;left:-2px}.WKeuLa_railWorkspace{flex-direction:column;align-items:center;gap:8px;padding-top:8px;display:flex}.WKeuLa_railButton{corner-shape:round;border-radius:50%;width:36px;height:36px;position:relative}.WKeuLa_railButton[aria-current=page]{--team-mark-ring:var(--dsw-alias-interactive-bg-hover);background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_workspaceSection{flex-direction:column;flex:1;gap:4px;min-height:0;margin-top:2px;display:flex;overflow-y:auto}.WKeuLa_section{flex-direction:column;display:flex}.WKeuLa_sectionHeader{align-items:center;min-height:26px;padding-right:2px;display:flex}.WKeuLa_sectionToggle{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:4px;align-items:center;gap:4px;min-width:0;min-height:24px;padding:0 6px;font-size:12px;line-height:18px;display:inline-flex}.WKeuLa_sectionToggle:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_sectionToggle:hover .WKeuLa_sectionChevron,.WKeuLa_sectionToggle:focus-visible .WKeuLa_sectionChevron{color:var(--dsw-alias-label-primary)}.WKeuLa_sectionChevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .12s,color .12s}.WKeuLa_sectionToggle[aria-expanded=false] .WKeuLa_sectionChevron{transform:rotate(-90deg)}.WKeuLa_sectionTitle{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.WKeuLa_sectionActions{align-items:center;margin-left:auto;display:inline-flex}.WKeuLa_panel{flex-direction:column;display:flex}.WKeuLa_iconButton{corner-shape:round;color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;border-radius:50%;justify-content:center;align-items:center;width:24px;height:24px;padding:0;display:inline-flex}.WKeuLa_iconButton:hover,.WKeuLa_iconButton:focus-visible{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_iconButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_textButton{color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;border-radius:5px;padding:2px 5px;font-size:11px;line-height:18px}.WKeuLa_textButton:hover,.WKeuLa_textButton:focus-visible{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.WKeuLa_textButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_textButton:disabled{cursor:not-allowed;opacity:.4}.WKeuLa_channelList,.WKeuLa_agentList{flex-direction:column;gap:1px;padding:0 4px 4px;display:flex}.WKeuLa_sidebarRowDragging{opacity:.5}.WKeuLa_sidebarRowDropBefore,.WKeuLa_sidebarRowDropAfter{position:relative}.WKeuLa_sidebarRowDropBefore:before,.WKeuLa_sidebarRowDropAfter:after{content:\"\";z-index:1;background:linear-gradient(55deg, transparent calc(50% - 1px), var(--dsw-alias-state-business-primary) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) 0 0 / 5px 7px no-repeat, linear-gradient(125deg, transparent calc(50% - 1px), var(--dsw-alias-state-business-primary) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) 0 5px / 5px 7px no-repeat, linear-gradient(var(--dsw-alias-state-business-primary) 0 0) 4px 5px / calc(100% - 4px) 2px no-repeat;pointer-events:none;height:12px;position:absolute;left:0;right:4px}.WKeuLa_sidebarRowDropBefore:before{top:-7px}.WKeuLa_sidebarRowDropAfter:after{bottom:-7px}.WKeuLa_channelRow{color:var(--dsw-alias-label-primary);border-radius:12px;align-items:center;min-height:30px;display:flex;position:relative}.WKeuLa_channelSelect{box-sizing:border-box;color:inherit;cursor:pointer;text-align:left;background:0 0;border:0;border-radius:12px;flex:1;align-items:center;min-width:0;min-height:30px;padding:3px 4px 3px 8px;display:flex}.WKeuLa_channelSelect:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_channelName{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:18px;overflow:hidden}.WKeuLa_agentRow{color:var(--dsw-alias-label-primary);border-radius:12px;align-items:center;min-height:38px;display:flex;position:relative}.WKeuLa_agentSelect{box-sizing:border-box;color:inherit;cursor:pointer;text-align:left;background:0 0;border:0;border-radius:12px;flex:1;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:0 8px;min-width:0;min-height:38px;padding:3px 4px 3px 8px;display:grid}.WKeuLa_agentSelect:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:-2px}.WKeuLa_agentSelect[aria-current=page]{background:var(--dsw-alias-interactive-bg-hover);border-radius:12px}.WKeuLa_agentRow:hover .WKeuLa_agentSelect[aria-current=page],.WKeuLa_agentRow:focus-within .WKeuLa_agentSelect[aria-current=page],.WKeuLa_agentRow[data-menu-open] .WKeuLa_agentSelect[aria-current=page]{background:0 0}.WKeuLa_agentAvatar{background:hsl(var(--team-avatar-hue,212) 42% 46%);corner-shape:round;color:#fff;cursor:default;border-radius:50%;flex:0 0 24px;justify-content:center;align-items:center;width:24px;height:24px;font-size:11px;font-weight:600;display:inline-flex;position:relative}.WKeuLa_agentAvatar[data-has-art=true]{background:0 0;border-radius:0}.WKeuLa_agentArt{filter:drop-shadow(0 1px 1px #122d482e);object-fit:contain;pointer-events:none;border:0;border-radius:0;flex:none;width:24px;height:24px;display:block}.WKeuLa_agentAvatarBadge{background:var(--dsw-specific-sidebar-fill);corner-shape:round;box-shadow:0 0 0 1px var(--dsw-specific-sidebar-fill);border-radius:50%;justify-content:center;align-items:center;width:12px;height:12px;padding:1px;line-height:0;display:inline-flex;position:absolute;bottom:-3px;right:-3px}.WKeuLa_agentCopy{flex-direction:column;justify-content:flex-start;min-width:0;display:flex}.WKeuLa_agentCopy strong{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:17px;overflow:hidden}.WKeuLa_agentCopy small{color:var(--dsw-alias-label-tertiary);text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:13px;overflow:hidden}.WKeuLa_unavailableDot{background:var(--dsw-alias-label-tertiary);corner-shape:round;border-radius:50%;width:7px;height:7px;display:inline-block}.WKeuLa_rowMenu{flex:none;align-items:center;padding-right:4px;display:none}.WKeuLa_channelRow:hover .WKeuLa_rowMenu,.WKeuLa_channelRow:focus-within .WKeuLa_rowMenu,.WKeuLa_channelRow[data-menu-open] .WKeuLa_rowMenu,.WKeuLa_agentRow:hover .WKeuLa_rowMenu,.WKeuLa_agentRow:focus-within .WKeuLa_rowMenu,.WKeuLa_agentRow[data-menu-open] .WKeuLa_rowMenu{display:inline-flex}.WKeuLa_channelRow[data-menu-open],.WKeuLa_agentRow[data-menu-open],.WKeuLa_channelRow:hover,.WKeuLa_agentRow:hover,.WKeuLa_channelRow:focus-within,.WKeuLa_agentRow:focus-within,.WKeuLa_channelRow[aria-current=page]{background:var(--dsw-alias-interactive-bg-hover)}.WKeuLa_rowMenuButton{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:4px;justify-content:center;align-items:center;width:20px;height:20px;padding:0;display:inline-flex}.WKeuLa_rowMenuButton:hover,.WKeuLa_rowMenuButton:focus-visible{color:var(--dsw-alias-label-primary)}.WKeuLa_rowMenuButton:focus-visible{outline:2px solid var(--dsw-alias-label-primary);outline-offset:1px}.WKeuLa_retryError{color:var(--dsw-alias-state-error-primary);justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;font-size:11px;display:flex}.WKeuLa_rowAlert{color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;padding:2px 8px 6px;font-size:11px}.WKeuLa_error{color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;margin:0;padding:4px 12px 6px;font-size:11px;line-height:16px}.WKeuLa_editDescription{color:var(--dsw-alias-label-secondary);margin:0 0 10px;font-size:12px;line-height:18px}.WKeuLa_editMemberList{gap:2px;display:grid}.WKeuLa_editChannelName{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:400;line-height:18px;overflow:hidden}.WKeuLa_editHint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:16px}.WKeuLa_menuHint{color:var(--dsw-alias-label-tertiary);margin-left:4px;font-size:10px;line-height:14px}.WKeuLa_rowError{color:var(--dsw-alias-state-error-primary);grid-column:1/-1;margin:2px 0;font-size:11px;line-height:16px}";
 		const tagId$14 = "dsh-sophia-entities/sidebar.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$14) + "]") === null) {
 			const tag = document.createElement("style");
@@ -8156,6 +8262,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			document.head.appendChild(tag);
 		}
 		var sidebar_module_css_default = {
+			"agentArt": "WKeuLa_agentArt",
 			"agentAvatar": "WKeuLa_agentAvatar",
 			"agentAvatarBadge": "WKeuLa_agentAvatarBadge",
 			"agentCopy": "WKeuLa_agentCopy",
@@ -8209,21 +8316,31 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		//#region src/client/TeamMemberAvatar.tsx
 		/**
 		* Sidebar Member avatar reusing the conversation identity language: the
-		* deterministic member hue and handle initial, with the presence indicator
-		* overlaid at the bottom-right so one glyph carries identity and state.
+		* member OC portrait when matched (falling back to deterministic hue and
+		* handle initial on image error or missing artwork), with the presence
+		* indicator overlaid at the bottom-right so one glyph carries identity and state.
 		*/
 		function TeamMemberAvatar({ status, t }) {
 			const label = presenceLabel(status, t);
 			const state = presenceDotState(status.presence);
+			const avatar = useAvatarImage(memberArtUrl(status.member.handle.replace(/^@/, ""), status.member.description) ?? void 0);
+			const hasArt = avatar.src !== void 0;
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
 				label,
 				delayMs: 300,
 				children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 					className: sidebar_module_css_default.agentAvatar,
-					style: { "--team-avatar-hue": memberHue(status.member.memberId) },
+					"data-has-art": hasArt ? "true" : void 0,
+					style: hasArt ? void 0 : { "--team-avatar-hue": memberHue(status.member.memberId) },
 					role: "img",
 					"aria-label": label,
-					children: [status.member.handle.replace("@", "").slice(0, 1).toUpperCase(), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+					children: [hasArt ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("img", {
+						className: sidebar_module_css_default.agentArt,
+						src: avatar.src,
+						alt: "",
+						"aria-hidden": "true",
+						onError: avatar.failed
+					}) : status.member.handle.replace("@", "").slice(0, 1).toUpperCase(), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 						className: sidebar_module_css_default.agentAvatarBadge,
 						"aria-hidden": "true",
 						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TeamStateDot, { state })
@@ -15298,112 +15415,6 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					cancel(timer);
 				}
 			};
-		}
-		//#endregion
-		//#region src/client/dag/artwork.ts
-		/**
-		* Shared artwork lookup for the activity panel and the conversation card:
-		* OC (original character) portraits per member role resolve first — by post
-		* title, then by a plainer role word — the legacy whale role images act as a
-		* fallback bucket, and the captain uses the OC lead.
-		* @module dsh-agent-teams/client/artwork
-		*/
-		/** Legacy whale artwork route prefix served by the plugin host half. */
-		const ART_BASE = "/plugins/dsh-sophia-entities/assets/";
-		/** OC portrait route prefix (512x512 WebP, flat slug directory). */
-		const OC_ART_BASE = "/plugins/dsh-sophia-entities/sophia-assets/";
-		/** V2 whale role artwork per role keyword (fallback buckets). */
-		const ROLE_ART = [
-			[/data|analys|metric|performance|数据|分析|指标|性能/, "member-data-v2.png"],
-			[/resear|investig|explor|study|研究|调查|探索|调研/, "member-researcher-v2.png"],
-			[/\bqa\b|test|verif|quality|测试|质量|验证/, "member-qa-v2.png"],
-			[/engineer|dev\b|server|backend|\bapi\b|runtime|watcher|contract|工程|后端|服务|接口|开发|代码|编程/, "member-engineer-v2.png"],
-			[/design|\bui\b|\bux\b|front|theme|accessib|设计|前端|主题|无障碍/, "member-designer-v2.png"],
-			[/secur|audit|risk|threat|review|安全|审计|审查|风险/, "member-security-v2.png"],
-			[/docs|writer|product|spec|撰写|文案|写作|文档|规范/, "member-docs-v2.png"],
-			[/release|\bbuild\b|deploy|\bops\b|\bci\b|ship|coordin|发布|构建|部署|运维|协调/, "member-operator-v2.png"]
-		];
-		/**
-		* OC (original character) portraits, one per of the 20 member posts. The
-		* Chinese post names and the modern English post labels both match, so the
-		* roster text resolves deterministically instead of falling through regex
-		* buckets. Source of truth for the post -> slug mapping:
-		* docs/material-integration.md §4.
-		*
-		* 钦天监 is the organisation (Agent Teams itself); every name here is a post
-		* inside it, the captain's post being 监正. The historical spelling
-		* 钦天监监正 stays in the lead pattern as an alias.
-		*/
-		const OC_ROLE_ART = [
-			[/\bceo\b|总负责|队长|监正|钦天监监正/, "lead-ceo.webp"],
-			[/\bproduct\s*director\b|产品总监|灵台主事/, "product-director.webp"],
-			[/\bprogram\s*director\b|项目总监|时宪主事/, "program-director.webp"],
-			[/\bresource\s*admin\b|资源|行政|典籍掌事/, "resource-admin.webp"],
-			[/\brisk\b|compliance|风控|合规|星禁掌察/, "risk-compliance.webp"],
-			[/\breq(?:uirement)?\s*analyst\b|需求分析|观象访事/, "requirement-analyst.webp"],
-			[/\bproduct\s*manager\b|产品经理|星图主事/, "product-manager.webp"],
-			[/\bux\b|交互|用户体?验|象绘主事/, "ux-designer.webp"],
-			[/\bui\b|视觉|界面|星绘主事/, "ui-designer.webp"],
-			[/\bclient\s*success\b|客户|对接|传报主事/, "client-success.webp"],
-			[/\barchitect\b|架构|灵台郎/, "architect.webp"],
-			[/\bbackend\b|后端|历算主事/, "backend-engineer.webp"],
-			[/\bfrontend\b|前端|星仪主事/, "frontend-engineer.webp"],
-			[/\bdata\s*engineer\b|数据工程|数象主事/, "data-engineer.webp"],
-			[/\balgorithm\b|算法|推步主事/, "algorithm-engineer.webp"],
-			[/\bbusiness\s*qa\b|业务.?qa|星验主事/, "business-qa.webp"],
-			[/\btest(?:ing)?\s*engineer\b|测试工程师|星机校验/, "test-engineer.webp"],
-			[/\bops\b|运维|值守|天象值守/, "ops-engineer.webp"],
-			[/\bcode\s*review\w*\b|代码评审|审校|星文审校/, "code-reviewer.webp"],
-			[/\bdocs\s*writer\b|文档撰写|录典主事/, "docs-writer.webp"]
-		];
-		/**
-		* Ordinary role words that name one of the same twenty posts in plainer English
-		* than the post titles do. Checked AFTER the posts, so a post title always wins,
-		* and BEFORE the whale buckets, so a member whose role is simply "reviewer" or
-		* "verifier" wears that post's OC portrait instead of a generic whale. Only
-		* unambiguous words are listed: "analyst" is a requirement analyst, but
-		* "engineer" alone is not a post, so it stays in the whale tier.
-		*/
-		const OC_ALIAS_ART = [
-			[/\bchief\b|\bcaptain\b|\blead\b|\bhead\b|队长|总负责/, "lead-ceo.webp"],
-			[/\bpm\b|\bowner\b|\bmanager\b|产品经理|经理/, "product-manager.webp"],
-			[/\btpm\b|\bcoordinator\b|项目经理|协调/, "program-director.webp"],
-			[/\badmin\w*|行政|资源/, "resource-admin.webp"],
-			[/\bsecurity\b|\baudit\w*|\bthreat\b|合规|风控|安全|审计/, "risk-compliance.webp"],
-			[/\bresearch\w*|\binvestigat\w*|\banalyst\b|\banalys\w*|研究|调研|调查|分析/, "requirement-analyst.webp"],
-			[/\bdesign\w*|设计|视觉|交互/, "ui-designer.webp"],
-			[/\bsuccess\b|\bsupport\b|\bsales\b|客户|支持|对接/, "client-success.webp"],
-			[/\barchitect\w*|架构/, "architect.webp"],
-			[/\bdeveloper\b|\bprogrammer\b|\bcoder\b|\bserver\b|\bbackend\b|开发|后端/, "backend-engineer.webp"],
-			[/\bfrontend\b|\bfront-end\b|\bweb\b|前端/, "frontend-engineer.webp"],
-			[/\bdata\b|数据/, "data-engineer.webp"],
-			[/\balgorithm\w*|算法/, "algorithm-engineer.webp"],
-			[/\bqa\b|\bverif\w*|\btest\w*|\bquality\b|测试|验证|校验/, "test-engineer.webp"],
-			[/\breview\w*|评审|审校/, "code-reviewer.webp"],
-			[/\bdevops\b|\bsre\b|\bops\b|\brelease\b|\bdeploy\w*|运维|部署|发布/, "ops-engineer.webp"],
-			[/\bwriter\b|\bdocs?\b|\bdocument\w*|文档|撰写/, "docs-writer.webp"]
-		];
-		/** Captain artwork: the OC lead portrait (监正 · lead-ceo). */
-		const LEAD_ART = `${OC_ART_BASE}lead-ceo.webp`;
-		/** Status action artwork per member activity (kept on whale images). */
-		const ACTION_ART = {
-			working: `${ART_BASE}action-working-v2.png`,
-			idle: `${ART_BASE}action-sleeping-v2.png`,
-			unknown: `${ART_BASE}action-thinking-v2.png`
-		};
-		/**
-		* Member artwork URL, or null when no role matches (initial-letter fallback).
-		* The OC portraits win first — the exact post title, then a plainer role word —
-		* and the legacy whale buckets only catch what is left.
-		* @param name - the member's display name.
-		* @param role - the member's role text.
-		* @returns the artwork URL, or null when unmatched.
-		*/
-		function memberArtUrl(name, role) {
-			const identity = `${name} ${role}`.toLowerCase();
-			for (const table of [OC_ROLE_ART, OC_ALIAS_ART]) for (const [pattern, art] of table) if (pattern.test(identity)) return `${OC_ART_BASE}${art}`;
-			for (const [pattern, art] of ROLE_ART) if (pattern.test(identity)) return `${ART_BASE}${art}`;
-			return null;
 		}
 		//#endregion
 		//#region \0dsh-css:packages/client-agent-team/src/client/dag/AgentTeamsCard.module.css.mjs
