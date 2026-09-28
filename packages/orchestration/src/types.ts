@@ -224,6 +224,22 @@ export interface TeamBackend {
    * owner sees and what the client matches artwork against.
    */
   removeMember?(ctx: unknown, teamRef: string, memberName: string): Promise<TeamMemberRow>
+  /**
+   * Hot-swap one existing member's model route (and nothing else).
+   *
+   * A member's model is decided at creation — either pinned by the plan or
+   * inherited from the host default — and a plan never carries a route the
+   * owner wants forever: quota runs out, routes are renamed, the owner simply
+   * prefers another model mid-flight. Recreating members to move them would
+   * discard every session and private memory they own, so the only sane path
+   * is the host's own in-place edit: same member, same session, same history,
+   * next request on the new route.
+   *
+   * `memberName` is the display handle; `selection.provider`/`selection.model`
+   * are exact identifiers. Optional: a backend without an edit path omits it
+   * and the caller reports that instead of pretending.
+   */
+  updateMemberModel?(ctx: unknown, teamRef: string, memberName: string, selection: { provider: string; model: string; reasoningEffort?: string }): Promise<TeamMemberRow>
 }
 
 /** Host-side guesses that tools need; injected so the layer stays testable. */

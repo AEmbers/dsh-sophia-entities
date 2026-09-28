@@ -28,7 +28,7 @@
  *   request id, so un-awaited retries resolve idempotently inside the ledger.
  */
 import type { AgentTeamAgentMemberStatus } from './types/entities.ts';
-import type { AgentTeamAddMemberRequest, AgentTeamAddMemberResult, AgentTeamCreateChannelRequest, AgentTeamCreateChannelResult, AgentTeamSendMessageRequest, AgentTeamSendMessageResult, AgentTeamRemoveMemberRequest, AgentTeamRemoveMemberResult, AgentTeamView, AgentTeamViewRequest } from './types/requests-results.ts';
+import type { AgentTeamAddMemberRequest, AgentTeamAddMemberResult, AgentTeamCreateChannelRequest, AgentTeamCreateChannelResult, AgentTeamSendMessageRequest, AgentTeamSendMessageResult, AgentTeamRemoveMemberRequest, AgentTeamRemoveMemberResult, AgentTeamUpdateMemberRequest, AgentTeamMemberResult, AgentTeamView, AgentTeamViewRequest } from './types/requests-results.ts';
 import type { TeamBackend } from 'dsh-sophia-entities/orchestration';
 /**
  * Structural narrow pick of the `AgentTeam` host's public surface, so the
@@ -73,6 +73,24 @@ export interface PersistentHostAPI {
      * reports that removal is unavailable instead of pretending to free the name.
      */
     readonly removeMember?: (request: AgentTeamRemoveMemberRequest) => Promise<AgentTeamRemoveMemberResult>;
+    /**
+     * In-place edit of one Member's mutable facts (handle, description, model
+     * route, capabilities override).
+     *
+     * WHY THE PLUGIN NEEDS THIS: a member's model is decided at creation —
+     * pinned by the plan or inherited from the host default — and quota runs
+     * out, routes get renamed, the owner changes preference mid-flight. The
+     * host's edit is a HOT swap: same member id, same session, same history,
+     * and only the next request lands on the new route. Recreating members to
+     * move them would discard everything they own, so this is the only sane
+     * mutation. The host wires it from `AgentTeam.updateMember`, which carries
+     * `@Remote('updateMember')`.
+     *
+     * The request echoes the stored handle/description/capabilities back: absent
+     * optional facts CLEAR the stored override, so a model-only caller must
+     * supply the rest of the row verbatim to avoid blanking it.
+     */
+    readonly updateMember?: (request: AgentTeamUpdateMemberRequest) => Promise<AgentTeamMemberResult>;
 }
 export interface SophiaPersistentBackendDeps {
     /** The live `AgentTeam` host instance, narrowed to the backend's structural needs. */
