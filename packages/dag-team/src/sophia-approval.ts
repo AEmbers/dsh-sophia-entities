@@ -666,6 +666,13 @@ function createLazyPersistentBackend(
       }
       return inner.removeMember(facadeCtx, teamRef, memberName)
     },
+    updateMemberModel: (facadeCtx, teamRef, memberName, selection) => {
+      const inner = resolveBackend()
+      if (inner.updateMemberModel === undefined) {
+        throw new Error('the persistent backend cannot update member models on this host build')
+      }
+      return inner.updateMemberModel(facadeCtx, teamRef, memberName, selection)
+    },
   }
 }
 

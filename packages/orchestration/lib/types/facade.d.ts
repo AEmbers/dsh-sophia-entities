@@ -103,6 +103,28 @@ export declare class SophiaTeamFacade {
         teamRef: string;
     }, memberName: string): Promise<TeamMemberRow>;
     /**
+     * Hot-swap one existing member's model route, keeping their session, history
+     * and private memory untouched.
+     *
+     * A member's model is decided at creation and a plan's choice never ages
+     * well: quota runs out, routes are renamed, the owner changes preference
+     * mid-flight. The host's own member edit updates the route in place — the
+     * live agent keeps its session and history, and only the next request lands
+     * on the new route — so this is the whole operation; recreating members to
+     * move them is never acceptable.
+     *
+     * Human-only: the model route decides whose quota each turn bills, which is
+     * owner money, so it carries the same authority as roster surgery.
+     */
+    updateMemberModel(caller: CallerIdentity, ref: {
+        mode: TeamMode;
+        teamRef: string;
+    }, memberName: string, selection: {
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+    }): Promise<TeamMemberRow>;
+    /**
      * Run the timeout sweep. Hosts call this from a timer; tests call it with a
      * fake clock. Returns the transitions that fired.
      */

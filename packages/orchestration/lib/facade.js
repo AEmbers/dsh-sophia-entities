@@ -188,6 +188,33 @@ export class SophiaTeamFacade {
         return backend.removeMember(this, ref.teamRef, memberName);
     }
     /**
+     * Hot-swap one existing member's model route, keeping their session, history
+     * and private memory untouched.
+     *
+     * A member's model is decided at creation and a plan's choice never ages
+     * well: quota runs out, routes are renamed, the owner changes preference
+     * mid-flight. The host's own member edit updates the route in place — the
+     * live agent keeps its session and history, and only the next request lands
+     * on the new route — so this is the whole operation; recreating members to
+     * move them is never acceptable.
+     *
+     * Human-only: the model route decides whose quota each turn bills, which is
+     * owner money, so it carries the same authority as roster surgery.
+     */
+    async updateMemberModel(caller, ref, memberName, selection) {
+        if (!caller.isHuman) {
+            throw new Error('only the Human owner may change a member model');
+        }
+        const backend = ref.mode === 'dag' ? this.dagBackend : this.persistentBackend;
+        if (!backend) {
+            throw new Error(`no backend is wired for mode '${ref.mode}'`);
+        }
+        if (!backend.updateMemberModel) {
+            throw new Error(`the '${ref.mode}' backend cannot update member models on this host build`);
+        }
+        return backend.updateMemberModel(this, ref.teamRef, memberName, selection);
+    }
+    /**
      * Run the timeout sweep. Hosts call this from a timer; tests call it with a
      * fake clock. Returns the transitions that fired.
      */

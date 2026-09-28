@@ -37,6 +37,7 @@ export interface ApprovalToolSet {
   approve: unknown
   addMember: unknown
   removeMember: unknown
+  updateMemberModel: unknown
 }
 
 /** Human-readable role summary of one planned member, for render text. */
@@ -361,11 +362,53 @@ export function registerApprovalTools(
     },
   })
 
+  const updateMemberModel = defineTool({
+    name: 'sophia_team_update_member_model',
+    description: 'Hot-swap one existing member\'s model route (provider + model), keeping their session, history and private memory untouched — the member\'s next request simply lands on the new route. Use this when a member\'s quota ran out, the route was renamed, or the owner changed preference mid-flight; never recreate members to move them. Human-owner-only.',
+    parameters: {
+      mode: { type: 'string', required: true, enum: ['persistent', 'dag'], description: 'Which backend owns the team.' },
+      team_ref: { type: 'string', required: true, description: 'Backend team ref the member currently belongs to, e.g. from /state or a materialization result.' },
+      name: { type: 'string', required: true, description: 'The member display name, exactly as it appears on the row.' },
+      provider: { type: 'string', required: true, description: 'Model provider route, e.g. workbuddy-xdpool.' },
+      model: { type: 'string', required: true, description: 'Model id, e.g. glm-5.3-flash.' },
+      reasoning_effort: { type: 'string', description: 'Reasoning effort id, when the model has one; omit for the model default.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', required: true },
+          name: { type: 'string', required: true },
+          role: { type: 'string', required: true },
+          state: { type: 'string', required: true },
+          model: { type: 'string' },
+        },
+      },
+      render: (args, value) => [{
+        type: 'text',
+        text: `Switched member ${value.name} to ${args.provider}/${args.model} — session and history kept, next request on the new route.`,
+      }],
+    },
+    async execute(args, exec) {
+      const caller = await resolveCaller(exec)
+      const facet = { isHuman: caller.isHuman, sessionId: caller.sessionId, handle: caller.handle, teamId: caller.teamId }
+      const row = await facade.updateMemberModel(
+        facet,
+        { mode: args.mode as TeamMode, teamRef: args.team_ref },
+        args.name,
+        { provider: args.provider, model: args.model, ...(args.reasoning_effort === undefined ? {} : { reasoningEffort: args.reasoning_effort }) },
+      )
+      return withoutUndefined({ id: row.id, name: row.name, role: row.role, state: row.state, model: row.model })
+    },
+  })
+
   ctx.tools.register(propose)
   ctx.tools.register(review)
   ctx.tools.register(approve)
   ctx.tools.register(addMember)
   ctx.tools.register(removeMember)
+  ctx.tools.register(updateMemberModel)
 
-  return { propose, review, approve, addMember, removeMember }
+  return { propose, review, approve, addMember, removeMember, updateMemberModel }
 }

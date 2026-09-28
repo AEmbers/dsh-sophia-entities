@@ -284,5 +284,60 @@ export function createSophiaPersistentBackend(deps) {
                 ...(removed.model === undefined ? {} : { model: removed.model.model }),
             });
         },
+        /**
+         * Hot-swap one member's model route, keeping their session and history.
+         *
+         * The host's `updateMember` is a full-row edit (handle, description,
+         * capabilities), but callers of this method only ever mean "move this
+         * member to another model route" — so the backend reads the stored row and
+         * echoes every OTHER mutable field back verbatim. An edit that silently
+         * blanked the description or cleared a capabilities override would be a
+         * much worse bug than a refused swap. The request contract itself demands
+         * the echo: absent optional facts CLEAR the stored override.
+         */
+        async updateMemberModel(_ctx, teamRef, memberName, selection) {
+            if (deps.host.members === undefined || deps.host.updateMember === undefined) {
+                throw new Error('这个宿主版本没有暴露成员编辑能力（AgentTeam.updateMember 未接线），'
+                    + '所以无法切换「' + memberName + '」的模型。');
+            }
+            const slash = teamRef.lastIndexOf('/');
+            const resolvedWorkspace = slash === -1 ? workspaceId : teamRef.slice(0, slash);
+            // Workspace-wide lookup, for the same reason as removeMember above: the
+            // ledger's identity rules are workspace-scoped, and a name must resolve
+            // the same way in every roster operation.
+            const matched = deps.host.members()
+                .filter(status => status.member.workspaceId === resolvedWorkspace && status.member.handle === memberName);
+            if (matched.length === 0) {
+                throw new Error(`这个 workspace 里没有叫「${memberName}」的成员，无法切换模型。`);
+            }
+            if (matched.length > 1) {
+                throw new Error(`这个 workspace 里有 ${matched.length} 个叫「${memberName}」的成员，名字不唯一，无法确定切换哪一个。`);
+            }
+            const target = matched[0].member;
+            const model = Object.freeze({
+                provider: selection.provider,
+                model: selection.model,
+                ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+            });
+            const result = await deps.host.updateMember({
+                requestId: requestId(`persistent:model:${target.memberId}:${Date.now().toString(36)}`),
+                memberId: target.memberId,
+                handle: target.handle,
+                description: target.description,
+                model,
+                // No capabilities field: the host clears an override only when the
+                // key is PRESENT-AND-ABSENT-of-value is indistinguishable here, so we
+                // omit the key entirely and the stored override survives untouched.
+                ...(target.capabilities === undefined ? {} : { capabilities: target.capabilities }),
+            });
+            const stored = result.status.member;
+            return Object.freeze({
+                id: stored.memberId,
+                name: stored.handle,
+                role: stored.description,
+                state: stored.state,
+                ...(stored.model === undefined ? {} : { model: stored.model.model }),
+            });
+        },
     });
 }
