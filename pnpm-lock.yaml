@@ -15,8 +15,8 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
       zod:
-        specifier: ^4.4.3
-        version: 4.4.3
+        specifier: ^4.6.6
+        version: 4.6.6
     devDependencies:
       '@deepseek-ai/dsh-storage-sqlite':
         specifier: 0.1.5-rc.2
@@ -533,6 +533,7 @@ packages:
 
   '@wowyuarm/dsh-context-continuity@0.1.4':
     resolution: {integrity: sha512-bkKfYW+k4V7IrZQDkgB25Bo5XNpVH+DVZtFJBNdU3IfYIQmhVhBmOD6m/tEz5V1FJdhZhzJqpi7CJL3kcxVO4Q==}
+    deprecated: moved to @contexera/dsh-context-continuity / 已迁移到新包名
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1
       '@deepseek-ai/dsh-agent': '>=0.1.7-rc.1 <0.1.8'
@@ -986,11 +987,8 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
-
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
 snapshots:
 
@@ -1310,7 +1308,7 @@ snapshots:
 
   '@wowyuarm/dsh-context-continuity@0.1.4':
     dependencies:
-      zod: 4.6.5
+      zod: 4.6.6
 
   ansi-regex@5.0.1: {}
 
@@ -1708,6 +1706,4 @@ snapshots:
 
   yaml@2.9.1: {}
 
-  zod@4.4.3: {}
-
-  zod@4.6.5: {}
+  zod@4.6.6: {}
